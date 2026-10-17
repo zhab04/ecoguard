@@ -9,24 +9,21 @@ import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="EcoGuard", layout="wide", page_icon="🛡️",
+st.set_page_config(page_title="EcoGuard", layout="centered", page_icon="🛡️",
                    initial_sidebar_state="collapsed")
 
 SERVER_URL = (os.environ.get("ECOGUARD_SERVER_URL") or "http://localhost:5000").rstrip("/")
 TIMEOUT = 6
-RADIO = "16px"
 
 PALETA_OSCURA = {
-    "bg": "#000000", "bg2": "#0B100C", "bg3": "#141C16", "line": "#1F2B22",
-    "text": "#EDF7F0", "muted": "#8FA397", "accent": "#00E676", "accent2": "#00C853",
-    "danger": "#FF5252", "sel": "#1B2A1F",
-    "glass": "rgba(11,16,12,0.62)", "glass2": "rgba(20,28,22,0.55)", "glass3": "rgba(0,0,0,0.35)",
+    "bg": "#000000", "line": "#1F2B22", "text": "#EDF7F0", "muted": "#8FA397",
+    "accent": "#00E676", "danger": "#FF5252", "sel": "#1B2A1F",
+    "card": "rgba(11,16,12,0.70)", "fill": "rgba(20,28,22,0.60)", "fill2": "rgba(0,0,0,0.35)",
 }
 PALETA_CLARA = {
-    "bg": "#F3F8F4", "bg2": "#FFFFFF", "bg3": "#E8F2EB", "line": "#D2E4D7",
-    "text": "#0B1A10", "muted": "#5B6F62", "accent": "#00C853", "accent2": "#00A843",
-    "danger": "#E53935", "sel": "#DDF4E4",
-    "glass": "rgba(255,255,255,0.66)", "glass2": "rgba(232,242,235,0.6)", "glass3": "rgba(255,255,255,0.4)",
+    "bg": "#F3F8F4", "line": "#D2E4D7", "text": "#0B1A10", "muted": "#5B6F62",
+    "accent": "#00C853", "danger": "#E53935", "sel": "#DDF4E4",
+    "card": "rgba(255,255,255,0.80)", "fill": "rgba(232,242,235,0.75)", "fill2": "rgba(255,255,255,0.55)",
 }
 
 # Mapas sin clave: Esri (base + etiquetas de calles y colonias)
@@ -41,7 +38,7 @@ MAPA_CLARO = (
 ATRIBUCION_MAPA = "Mapa &copy; Esri y colaboradores"
 
 LOGO_SVG = """
-<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="1.8" aria-hidden="true">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="1.8" aria-hidden="true">
   <path d="M12 2.5 L19.5 5.5 V11 C19.5 15.8 16.4 19.8 12 21.5 C7.6 19.8 4.5 15.8 4.5 11 V5.5 Z"/>
   <circle cx="12" cy="11" r="3.6"/><circle cx="12" cy="11" r="1.2" fill="#00E676" stroke="none"/>
 </svg>"""
@@ -56,201 +53,132 @@ def css_tema(p):
     return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-:root {{ {variables} --radio: {RADIO}; --gap: 10px; }}
+:root {{ {variables} }}
 
-/* Sin desplazamiento horizontal en ninguna pantalla */
-html, body {{ overflow-x: hidden !important; max-width: 100vw; }}
-[data-testid="stAppViewContainer"], [data-testid="stMain"], .stApp {{
-  overflow-x: hidden !important; max-width: 100vw;
-}}
 html, body, [class*="css"], .stApp, p, label, input, button, textarea {{
   font-family: 'Roboto', system-ui, sans-serif !important;
-  box-sizing: border-box;
 }}
-.stApp {{
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(0,230,118,.10), transparent 60%),
-    radial-gradient(900px 500px at 110% 10%, rgba(0,200,83,.07), transparent 60%),
-    var(--bg);
-  color: var(--text);
-}}
-.stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{ color: var(--text); }}
+.stApp {{ background: var(--bg); color: var(--text); }}
+.stApp p, .stApp label, .stApp li, .stApp h2, .stApp h3, .stApp h4 {{ color: var(--text); }}
 header[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display: none !important; }}
 
+/* Contenido centrado y con ancho máximo; Streamlit maneja el resto del diseño */
 .block-container {{
-  padding: 14px clamp(10px, 3vw, 28px) 96px !important;
-  max-width: 1200px !important; width: 100%; margin: 0 auto;
+  max-width: 1100px !important; width: 100%; margin: 0 auto;
+  padding: 1rem 1rem 5rem !important;
 }}
+h2 {{ font-size: 1.5rem !important; font-weight: 700 !important; margin: 0 !important; }}
 
-/* Columnas: en computadora lado a lado; en teléfono, una debajo de otra */
-[data-testid="stHorizontalBlock"] {{
-  flex-wrap: wrap !important; gap: var(--gap) !important; align-items: stretch; width: 100%;
-}}
-[data-testid="stHorizontalBlock"] > [data-testid="column"] {{
-  flex: 1 1 260px !important; min-width: 0 !important; max-width: 100% !important; width: auto !important;
-}}
-[data-testid="stVerticalBlock"] {{ gap: var(--gap); min-width: 0; }}
-[data-testid="stVerticalBlockBorderWrapper"], .stMarkdown, .element-container, iframe {{ max-width: 100%; }}
+.logo {{ display: flex; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: 700; color: var(--text); }}
+.subtitle {{ color: var(--muted); font-size: .9rem; margin: 0 0 4px; }}
 
-h2 {{ font-size: clamp(1.3rem, 5vw, 1.8rem) !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: -.3px; }}
-
-/* Encabezado */
-.logo {{ display: flex; align-items: center; gap: 8px; font-size: 1.3rem; font-weight: 700; color: var(--text); }}
-.subtitle {{ color: var(--muted); font-size: .92rem; margin: 2px 0 8px; line-height: 1.35; }}
-
-/* Tarjetas: un solo marco, sin duplicados */
+/* Tarjetas translúcidas */
 [data-testid="stVerticalBlockBorderWrapper"] {{
-  background: var(--glass) !important;
-  -webkit-backdrop-filter: blur(14px) saturate(120%);
-  backdrop-filter: blur(14px) saturate(120%);
-  border: 1px solid var(--line) !important;
-  border-radius: var(--radio) !important;
-  box-shadow: 0 8px 24px rgba(0,0,0,.18);
-  animation: fadeUp .45s ease both;
-  padding: 0 !important;
-  overflow: hidden;
-  width: 100%;
+  background: var(--card) !important;
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border: 1px solid var(--line) !important; border-radius: 16px !important;
+  animation: aparece .35s ease both;
 }}
-[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 12px !important; }}
-[data-testid="stVerticalBlockBorderWrapper"] > div > div {{ gap: .5rem; }}
-/* Quita marcos anidados (evita el doble borde) */
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] {{
-  background: transparent !important; border: 0 !important; box-shadow: none !important;
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
-  border-radius: 0 !important; padding: 0 !important; animation: none !important;
-}}
-@keyframes fadeUp {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: none; }} }}
-@keyframes pulso {{ 0%, 100% {{ opacity: 1; transform: scale(1); }} 50% {{ opacity: .3; transform: scale(.6); }} }}
+@keyframes aparece {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+@keyframes pulso {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: .3; }} }}
 
-/* Navegación en pastillas: se acomoda en varias líneas */
+/* Navegación en pastillas */
 div[role="radiogroup"] {{
-  display: flex; flex-wrap: wrap; gap: 4px; background: var(--glass);
-  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-  border: 1px solid var(--line); border-radius: 22px; padding: 4px; margin-bottom: 8px; width: 100%;
+  display: flex; flex-wrap: wrap; gap: 4px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin: 0 0 6px;
 }}
 div[role="radiogroup"] label {{
-  border-radius: 999px !important; padding: 6px 11px !important; margin: 0 !important;
-  transition: background .25s ease, transform .15s ease; cursor: pointer;
+  border-radius: 999px !important; padding: 5px 10px !important; margin: 0 !important; cursor: pointer;
+  transition: background .2s ease;
 }}
-div[role="radiogroup"] label:hover {{ background: var(--glass2); }}
-div[role="radiogroup"] label:active {{ transform: scale(.96); }}
+div[role="radiogroup"] label:hover {{ background: var(--fill); }}
 div[role="radiogroup"] label > div:first-child {{ display: none !important; }}
-div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: .88rem !important; color: var(--muted) !important; white-space: nowrap; }}
+div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: .85rem !important; color: var(--muted) !important; white-space: nowrap; }}
 div[role="radiogroup"] label:has(input:checked) {{ background: var(--accent); }}
 div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 
 /* Botones */
 .stButton > button {{
   background: var(--accent); color: #000; border: 0; border-radius: 999px; font-weight: 700;
-  width: 100%; padding: .5rem .7rem; font-size: .92rem;
-  transition: transform .15s ease, filter .2s ease; white-space: normal; line-height: 1.2;
+  width: 100%; padding: .45rem .6rem; font-size: .9rem; line-height: 1.2; transition: filter .2s ease;
 }}
 .stButton > button:hover {{ filter: brightness(1.08); color: #000; }}
-.stButton > button:active {{ transform: scale(.97); }}
-.stButton > button:disabled {{ opacity: .45; }}
+.stButton > button:active {{ transform: scale(.98); }}
+.stButton > button:disabled {{ opacity: .4; }}
 
-/* Campos y sliders */
+/* Campos */
 .stTextInput input {{
-  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 12px !important;
-  color: var(--text) !important; padding: .55rem .8rem !important; font-size: .98rem !important;
+  background: var(--fill) !important; border: 1px solid var(--line) !important; border-radius: 10px !important;
+  color: var(--text) !important; padding: .5rem .7rem !important; font-size: .95rem !important;
 }}
-.stTextInput input:focus {{ border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(0,230,118,.18) !important; }}
-[data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; font-size: .88rem !important; }}
-[data-testid="stSlider"] [role="slider"] {{ background: var(--accent) !important; box-shadow: 0 0 0 4px rgba(0,230,118,.18); }}
+.stTextInput input:focus {{ border-color: var(--accent) !important; box-shadow: none !important; }}
+[data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; font-size: .85rem !important; }}
+[data-testid="stSlider"] [role="slider"] {{ background: var(--accent) !important; }}
 [data-testid="stSlider"] div[data-baseweb="slider"] > div > div:nth-child(2) {{ background: var(--accent) !important; }}
 [data-testid="stSelectbox"] div[data-baseweb="select"] > div {{
-  background: var(--glass2) !important; border-color: var(--line) !important; border-radius: 12px !important;
+  background: var(--fill) !important; border-color: var(--line) !important; border-radius: 10px !important;
 }}
-[data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; white-space: nowrap; font-size: .9rem; }}
+[data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; font-size: .85rem; white-space: nowrap; }}
 
-/* Expansor y captions */
-[data-testid="stExpander"] {{
-  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 12px !important;
-}}
-[data-testid="stExpander"] summary p {{ color: var(--muted) !important; }}
-[data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; font-size: .82rem !important; }}
-hr {{ border-color: var(--line) !important; }}
-[data-testid="stDataFrame"] {{ border-radius: 12px; overflow: hidden; border: 1px solid var(--line); max-width: 100%; }}
-[data-testid="stVideo"] video {{ border-radius: 12px; width: 100%; }}
+/* Expansor y textos auxiliares */
+[data-testid="stExpander"] {{ background: var(--fill) !important; border: 1px solid var(--line) !important; border-radius: 10px !important; }}
+[data-testid="stExpander"] summary p {{ color: var(--muted) !important; font-size: .9rem; }}
+[data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; font-size: .8rem !important; }}
+hr {{ border-color: var(--line) !important; margin: .4rem 0 !important; }}
+[data-testid="stVideo"] video {{ border-radius: 10px; }}
 
-/* Etiquetas de estado */
+/* Estado */
 .live {{
-  display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #000;
-  font-weight: 700; font-size: .72rem; padding: 3px 9px; border-radius: 999px; margin-top: 6px;
+  display: inline-flex; align-items: center; gap: 5px; background: var(--accent); color: #000;
+  font-weight: 700; font-size: .7rem; padding: 2px 8px; border-radius: 999px; margin-top: 4px;
 }}
 .live::before {{ content: ""; width: 6px; height: 6px; border-radius: 50%; background: #000; animation: pulso 1.3s infinite; }}
 .off {{
-  display: inline-flex; align-items: center; background: var(--glass3); color: var(--muted);
-  border: 1px solid var(--line); font-weight: 600; font-size: .72rem; padding: 3px 9px; border-radius: 999px; margin-top: 6px;
+  display: inline-flex; background: var(--fill2); color: var(--muted);
+  border: 1px solid var(--line); font-weight: 600; font-size: .7rem; padding: 2px 8px; border-radius: 999px; margin-top: 4px;
 }}
-.titulo-cam {{ font-size: 1.05rem; font-weight: 700; margin-top: 6px; color: var(--text); overflow-wrap: anywhere; }}
-.zona {{ color: var(--muted); font-size: .86rem; margin-top: 2px; overflow-wrap: anywhere; }}
+.titulo-cam {{ font-size: 1rem; font-weight: 700; margin-top: 4px; color: var(--text); overflow-wrap: anywhere; }}
+.zona {{ color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }}
 
-/* Video: 16:9 que se adapta al ancho de la tarjeta */
+/* Video en proporción 16:9 */
 .thumb {{
-  position: relative; width: 100%; aspect-ratio: 16 / 9; background: rgba(5,8,5,.55);
-  border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  position: relative; width: 100%; aspect-ratio: 16 / 9; background: var(--fill2);
+  border-radius: 10px; overflow: hidden; border: 1px solid var(--line);
 }}
 .thumb img {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }}
 .thumb .sin {{
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 6px; color: #8FA397; font-size: .9rem; text-align: center; padding: 8px;
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: .9rem; text-align: center; padding: 8px;
 }}
 
 /* Indicadores */
-.kpis {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin: 2px 0 6px; }}
-.kpi {{
-  background: var(--glass2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; min-width: 0;
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-}}
-.kpi small {{ display: block; color: var(--muted); font-size: .72rem; }}
-.kpi b {{ display: block; color: var(--accent); font-size: 1.1rem; margin-top: 1px; overflow-wrap: anywhere; }}
+.kpis {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0 0 4px; }}
+.kpi {{ background: var(--fill); border: 1px solid var(--line); border-radius: 10px; padding: 6px 9px; min-width: 0; }}
+.kpi small {{ display: block; color: var(--muted); font-size: .7rem; }}
+.kpi b {{ display: block; color: var(--accent); font-size: 1.05rem; overflow-wrap: anywhere; }}
 
-/* Leyenda */
-.leyenda {{ display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--muted); font-size: .8rem; margin: 4px 0; }}
+.leyenda {{ display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: .8rem; margin: 4px 0; }}
 .leyenda i {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }}
 
-/* Lista animada */
+/* Lista */
 .al {{ display: flex; flex-direction: column; gap: 5px; }}
 .al-item {{
-  background: var(--glass2); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px;
+  background: var(--fill); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
   display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-  opacity: 0; transform: translateX(-14px); animation: entra .4s ease forwards;
-  animation-delay: calc(var(--i) * 50ms); transition: background .2s ease, transform .2s ease;
+  opacity: 0; animation: entra .35s ease forwards; animation-delay: calc(var(--i) * 40ms);
 }}
-.al-item:hover {{ background: var(--sel); transform: translateX(3px); }}
-@keyframes entra {{ to {{ opacity: 1; transform: none; }} }}
+@keyframes entra {{ to {{ opacity: 1; }} }}
 .al-item > div:first-child {{ min-width: 0; }}
-.al-titulo {{ font-weight: 600; color: var(--text); overflow-wrap: anywhere; font-size: .95rem; }}
-.al-desc {{ color: var(--muted); font-size: .84rem; margin-top: 2px; overflow-wrap: anywhere; }}
-.al-meta {{ color: var(--muted); font-size: .76rem; white-space: nowrap; flex-shrink: 0; }}
-.vacio {{
-  text-align: center; color: var(--muted); padding: 20px 10px; border: 1px dashed var(--line);
-  border-radius: 12px; background: var(--glass3); font-size: .92rem;
-}}
-.aviso {{
-  background: var(--glass3); border: 1px dashed var(--line); border-radius: 12px; padding: 14px;
-  text-align: center; color: var(--muted); font-size: .92rem;
-}}
-
-/* Teléfonos: todo en una sola columna, a ancho completo */
-@media (max-width: 640px) {{
-  .block-container {{ padding: 10px 10px 90px !important; }}
-  [data-testid="stHorizontalBlock"] {{ flex-direction: column !important; gap: 8px !important; }}
-  [data-testid="stHorizontalBlock"] > [data-testid="column"] {{
-    flex: 1 1 100% !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important;
-  }}
-  [data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 10px !important; }}
-  .kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-  .logo {{ font-size: 1.15rem; }}
-  .subtitle {{ font-size: .86rem; }}
-  div[role="radiogroup"] label p {{ font-size: .82rem !important; }}
-  div[role="radiogroup"] label {{ padding: 5px 9px !important; }}
+.al-titulo {{ font-weight: 600; color: var(--text); overflow-wrap: anywhere; font-size: .92rem; }}
+.al-desc {{ color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }}
+.al-meta {{ color: var(--muted); font-size: .75rem; white-space: nowrap; flex-shrink: 0; }}
+.vacio, .aviso {{
+  text-align: center; color: var(--muted); padding: 14px; border: 1px dashed var(--line);
+  border-radius: 10px; font-size: .9rem;
 }}
 
 @media (prefers-reduced-motion: reduce) {{
-  [data-testid="stVerticalBlockBorderWrapper"], .al-item {{ animation: none !important; opacity: 1 !important; transform: none !important; }}
+  [data-testid="stVerticalBlockBorderWrapper"], .al-item {{ animation: none !important; opacity: 1 !important; }}
 }}
 </style>
 """
@@ -285,8 +213,7 @@ def esc(texto):
 
 def thumb_html(url=None, texto="Sin señal"):
     img = f'<img src="{url}" onerror="this.style.display=\'none\'" />' if url else ""
-    return (f'<div class="thumb"><div class="sin"><div style="font-size:1.8rem">📡</div>'
-            f'<div>{texto}</div></div>{img}</div>')
+    return f'<div class="thumb"><div class="sin">{texto}</div>{img}</div>'
 
 
 def badge(activo):
@@ -315,19 +242,19 @@ def hora_de(fecha):
 
 
 # ---------------------------------------------------------------------------
-# Plantillas de componentes HTML (audio y hablar), con colores del tema
+# Componentes HTML (audio y hablar), con colores del tema
 # ---------------------------------------------------------------------------
 PLANTILLA_AUDIO = """
-<div style="font-family:Roboto,sans-serif;color:__TEXT__;background:__GLASS__;border:1px solid __LINE__;
-            border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-            backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box;width:100%">
+<div style="font-family:Roboto,sans-serif;color:__TEXT__;background:__FILL__;border:1px solid __LINE__;
+            border-radius:10px;padding:6px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+            box-sizing:border-box;width:100%">
   <audio id="a" src="__URL__" autoplay></audio>
-  <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:7px 12px;
-          font-weight:700;cursor:pointer;white-space:nowrap;font-size:13px">🔇 Silenciar</button>
-  <div style="display:flex;align-items:center;gap:6px;flex:1 1 140px;min-width:0">
+  <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:6px 10px;
+          font-weight:700;cursor:pointer;white-space:nowrap;font-size:12px">🔇 Silenciar</button>
+  <div style="display:flex;align-items:center;gap:6px;flex:1 1 120px;min-width:0">
     <span style="color:__MUTED__;font-size:12px">🔊</span>
     <input id="v" type="range" min="0" max="100" value="100" style="flex:1;min-width:0;accent-color:__ACCENT__">
-    <span id="vt" style="color:__MUTED__;font-size:12px;min-width:34px;text-align:right">100%</span>
+    <span id="vt" style="color:__MUTED__;font-size:12px;min-width:32px;text-align:right">100%</span>
   </div>
 </div>
 <script>
@@ -341,13 +268,12 @@ a.play().catch(() => {});
 """
 
 PLANTILLA_HABLAR = """
-<div style="font-family:Roboto,sans-serif;background:__GLASS__;border:1px solid __LINE__;
-            border-radius:12px;padding:8px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-            box-sizing:border-box;width:100%">
+<div style="font-family:Roboto,sans-serif;background:__FILL__;border:1px solid __LINE__;
+            border-radius:10px;padding:6px;box-sizing:border-box;width:100%">
   <button id="h" style="width:100%;background:__ACCENT__;color:#000;border:0;border-radius:999px;
-          padding:9px;font-weight:700;font-size:14px;cursor:pointer;user-select:none;touch-action:none">
+          padding:8px;font-weight:700;font-size:14px;cursor:pointer;user-select:none;touch-action:none">
     🎙️ Mantén presionado para hablar</button>
-  <div id="s" style="color:__MUTED__;font-size:12px;margin-top:4px;line-height:1.3">Micrófono apagado</div>
+  <div id="s" style="color:__MUTED__;font-size:12px;margin-top:3px">Micrófono apagado</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script>
@@ -413,7 +339,7 @@ def render_plantilla(plantilla, reemplazos):
 
 
 def colores_iframe(p):
-    return {"__TEXT__": p["text"], "__GLASS__": p["glass"], "__LINE__": p["line"],
+    return {"__TEXT__": p["text"], "__FILL__": p["fill"], "__LINE__": p["line"],
             "__ACCENT__": p["accent"], "__MUTED__": p["muted"], "__DANGER__": p["danger"]}
 
 
@@ -422,7 +348,7 @@ def reproductor_audio(cam, pin):
         **colores_iframe(paleta_actual()),
         "__URL__": f"{SERVER_URL}/audio_feed/{cam}/{pin}",
     })
-    components.html(html_audio, height=92)
+    components.html(html_audio, height=74)
 
 
 def boton_hablar(cam, pin):
@@ -432,7 +358,7 @@ def boton_hablar(cam, pin):
         "__CAM__": json.dumps(cam),
         "__PIN__": json.dumps(pin),
     })
-    components.html(html_hablar, height=104)
+    components.html(html_hablar, height=96)
 
 
 def accion(cam, pin, accion_id, texto):
@@ -488,24 +414,16 @@ def vista_crear():
             st.code(nueva["cam_id"])
             st.markdown("**PIN**")
             st.code(nueva["pin"])
-            st.markdown('<div class="aviso">Escribe este ID y PIN en la página /cliente del teléfono '
-                        'y en la sección Cámara.</div>', unsafe_allow_html=True)
 
 
 def vista_camara():
     st.markdown('<h2>Cámara</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Video en vivo, audio, controles y grabaciones.</div>',
-                unsafe_allow_html=True)
 
     with st.container(border=True):
-        c1, c2, c3 = st.columns([3, 3, 2], vertical_alignment="bottom")
-        with c1:
-            cam_id = st.text_input("ID de la cámara", key="ind_cam_id", placeholder="cam-tigre-27")
-        with c2:
-            token = st.text_input("PIN", type="password", key="ind_token", placeholder="tigre482")
-        with c3:
-            if st.button("Conectar", key="ind_connect"):
-                st.session_state.ind_activa = (cam_id.strip().lower(), token.strip().lower())
+        cam_id = st.text_input("ID de la cámara", key="ind_cam_id", placeholder="cam-tigre-27")
+        token = st.text_input("PIN", type="password", key="ind_token", placeholder="tigre482")
+        if st.button("Conectar", key="ind_connect"):
+            st.session_state.ind_activa = (cam_id.strip().lower(), token.strip().lower())
 
     activa = st.session_state.get("ind_activa")
     if not activa or not activa[0] or not activa[1]:
@@ -522,48 +440,42 @@ def vista_camara():
     if nodo is None:
         st.error("Esa cámara no existe. Créala en la sección Crear.")
         return
-
     if not nodo["activo"]:
-        st.info("La cámara no está transmitiendo. En el teléfono abre /cliente, escribe el ID y PIN "
-                "y pulsa Iniciar nodo.")
+        st.info("La cámara no está transmitiendo. Abre /cliente en el teléfono y pulsa Iniciar nodo.")
 
-    izquierda, derecha = st.columns([3, 2], gap="small")
-    with izquierda:
-        with st.container(border=True):
-            st.markdown(thumb_html(f"{SERVER_URL}/video_feed/{cam}/{pin}", "Buscando señal…"),
-                        unsafe_allow_html=True)
-            st.markdown(f'<div class="titulo-cam">Cámara {esc(cam)}</div>'
-                        f'<div class="zona">📍 {esc(nodo["zona"])}</div>{badge(nodo["activo"])}',
-                        unsafe_allow_html=True)
-            reproductor_audio(cam, pin)
-            boton_hablar(cam, pin)
+    with st.container(border=True):
+        st.markdown(thumb_html(f"{SERVER_URL}/video_feed/{cam}/{pin}", "Buscando señal…"),
+                    unsafe_allow_html=True)
+        st.markdown(f'<div class="titulo-cam">Cámara {esc(cam)}</div>'
+                    f'<div class="zona">📍 {esc(nodo["zona"])}</div>{badge(nodo["activo"])}',
+                    unsafe_allow_html=True)
+        reproductor_audio(cam, pin)
+        boton_hablar(cam, pin)
 
-    with derecha:
-        with st.container(border=True):
-            st.markdown(kpis([
-                ("Batería", nodo["bateria"]),
-                ("FPS de video", nodo["fps"]),
-                ("Sonido", f"{nodo['ultimo_db']} dB" if nodo["ultimo_db"] is not None else "N/D"),
-                ("Movimiento", f"{nodo['movimiento']} m/s²" if nodo["movimiento"] is not None else "N/D"),
-            ]), unsafe_allow_html=True)
-            st.caption(f"Velocidad GPS: {nodo['velocidad'] or 'N/D'} km/h · Red: {nodo['red'] or 'N/D'} · "
-                       f"Última señal: {nodo['ultima_vez'] or 'N/D'}")
-            st.markdown("**Controles**")
-            b1, b2 = st.columns(2)
-            if b1.button("● Grabar", key="rec_on"):
-                accion(cam, pin, "start_recording", "Grabación iniciada")
-            if b2.button("■ Detener", key="rec_off"):
-                accion(cam, pin, "stop_recording", "Grabación detenida")
-            b3, b4 = st.columns(2)
-            if b3.button("Silenciar mic.", key="mute_on"):
-                accion(cam, pin, "mute_audio", "Micrófono del teléfono silenciado")
-            if b4.button("Activar mic.", key="mute_off"):
-                accion(cam, pin, "unmute_audio", "Micrófono del teléfono activado")
-            b5, b6 = st.columns(2)
-            if b5.button("Calidad alta", key="q_alta"):
-                accion(cam, pin, "calidad_alta", "Calidad alta")
-            if b6.button("Ahorro", key="q_baja"):
-                accion(cam, pin, "calidad_baja", "Calidad baja")
+    with st.container(border=True):
+        st.markdown(kpis([
+            ("Batería", nodo["bateria"]),
+            ("FPS", nodo["fps"]),
+            ("Sonido", f"{nodo['ultimo_db']} dB" if nodo["ultimo_db"] is not None else "N/D"),
+            ("Movimiento", f"{nodo['movimiento']} m/s²" if nodo["movimiento"] is not None else "N/D"),
+        ]), unsafe_allow_html=True)
+        st.caption(f"Velocidad: {nodo['velocidad'] or 'N/D'} km/h · Red: {nodo['red'] or 'N/D'} · "
+                   f"Última señal: {nodo['ultima_vez'] or 'N/D'}")
+        b1, b2 = st.columns(2)
+        if b1.button("● Grabar", key="rec_on"):
+            accion(cam, pin, "start_recording", "Grabación iniciada")
+        if b2.button("■ Detener", key="rec_off"):
+            accion(cam, pin, "stop_recording", "Grabación detenida")
+        b3, b4 = st.columns(2)
+        if b3.button("Silenciar mic.", key="mute_on"):
+            accion(cam, pin, "mute_audio", "Micrófono del teléfono silenciado")
+        if b4.button("Activar mic.", key="mute_off"):
+            accion(cam, pin, "unmute_audio", "Micrófono del teléfono activado")
+        b5, b6 = st.columns(2)
+        if b5.button("Calidad alta", key="q_alta"):
+            accion(cam, pin, "calidad_alta", "Calidad alta")
+        if b6.button("Ahorro", key="q_baja"):
+            accion(cam, pin, "calidad_baja", "Calidad baja")
 
     with st.container(border=True):
         st.markdown("#### Fragmentos grabados")
@@ -612,11 +524,10 @@ def ranura_cuadricula(i, por_id):
 
 def vista_cuadricula():
     st.markdown('<h2>Cuadrícula</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Monitorea hasta nueve cámaras a la vez.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Hasta nueve cámaras. En teléfono se muestran una debajo de otra.</div>',
+                unsafe_allow_html=True)
 
-    with st.container(border=True):
-        columnas = st.slider("Columnas por fila (en teléfono se muestran en una columna)", 1, 3, 2,
-                             key="grid_cols")
+    columnas = st.slider("Columnas", 1, 3, 2, key="grid_cols")
 
     nodos = api_get("/api/estado_nodos") or []
     por_id = {n["id"]: n for n in nodos}
@@ -630,7 +541,7 @@ def vista_cuadricula():
     fila = None
     for i in range(9):
         if i % columnas == 0:
-            fila = st.columns(columnas, gap="small")
+            fila = st.columns(columnas)
         with fila[i % columnas]:
             ranura_cuadricula(i, por_id)
 
@@ -638,12 +549,9 @@ def vista_cuadricula():
 @st.fragment(run_every="5s")
 def vista_mapa():
     st.markdown('<h2>Mapa</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Ubicación y estado de cada cámara. Se actualiza cada 5 segundos '
-                'sin mover tu vista.</div>', unsafe_allow_html=True)
-    st.markdown(f"Mapa público para compartir: [{SERVER_URL}/mapa]({SERVER_URL}/mapa)")
+    st.markdown(f"Mapa público: [{SERVER_URL}/mapa]({SERVER_URL}/mapa)")
 
-    with st.container(border=True):
-        horas = st.slider("Eventos de las últimas horas", 1, 24, 24, key="mapa_horas")
+    horas = st.slider("Eventos de las últimas horas", 1, 24, 24, key="mapa_horas")
 
     nodos = api_get("/api/estado_nodos")
     if nodos is None:
@@ -660,8 +568,8 @@ def vista_mapa():
         st.session_state.mapa_vista = {"centro": centro, "zoom": 14 if len(nodos) > 1 else 16}
 
     base_url, ref_url = MAPA_CLARO if st.session_state.get("claro", False) else MAPA_OSCURO
-    vista_mapa_actual = st.session_state.mapa_vista
-    mapa = folium.Map(location=vista_mapa_actual["centro"], zoom_start=vista_mapa_actual["zoom"],
+    vista_actual = st.session_state.mapa_vista
+    mapa = folium.Map(location=vista_actual["centro"], zoom_start=vista_actual["zoom"],
                       tiles=base_url, attr=ATRIBUCION_MAPA)
     folium.TileLayer(tiles=ref_url, attr=ATRIBUCION_MAPA, name="Etiquetas",
                      overlay=True, control=False).add_to(mapa)
@@ -673,20 +581,18 @@ def vista_mapa():
             folium.Circle(location=[n["lat"], n["lon"]], radius=n["precision_m"],
                           color=color_hex, fill=True, fill_opacity=0.08, weight=1).add_to(mapa)
         popup = f"""
-        <div style="font-family:Roboto,Arial,sans-serif;width:220px;color:#000;font-size:14px">
-          <div style="font-size:17px;font-weight:700;margin-bottom:6px">{esc(n['id'])}</div>
+        <div style="font-family:Roboto,Arial,sans-serif;width:210px;color:#000;font-size:14px">
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px">{esc(n['id'])}</div>
           <div>Zona: <b>{esc(n['zona'])}</b></div>
           <div>Estado: <b style="color:{color_hex}">{estado_txt}</b></div>
           <div>Batería: {esc(n['bateria'])} {'⚡' if n['cargando'] else ''}</div>
-          <div>Velocidad: {esc(n['velocidad'] or 'N/D')} km/h</div>
           <div>Sonido: {esc(n['ultimo_db'] if n['ultimo_db'] is not None else 'N/D')} dB</div>
-          <div>FPS: {esc(n['fps'])} · Grabando: {'sí' if n['grabando'] else 'no'}</div>
           <div>GPS: {n['lat']:.5f}, {n['lon']:.5f}</div>
           <div>Última señal: {esc(n['ultima_vez'] or 'N/D')}</div>
         </div>"""
         folium.Marker(
             location=[n["lat"], n["lon"]],
-            popup=folium.Popup(popup, max_width=260),
+            popup=folium.Popup(popup, max_width=240),
             tooltip=f"{n['id']} · {n['zona']} · {estado_txt}",
             icon=folium.Icon(color="green" if n["activo"] else "gray", icon="video-camera", prefix="fa"),
         ).add_to(mapa)
@@ -696,11 +602,11 @@ def vista_mapa():
             continue
         color = "#FF5252" if e["tipo"] == "robo" else "#FFB300"
         folium.CircleMarker(
-            location=[e["lat"], e["lon"]], radius=9, color=color, fill=True, fill_opacity=0.8,
+            location=[e["lat"], e["lon"]], radius=8, color=color, fill=True, fill_opacity=0.8,
             tooltip=f"{hora_de(e['fecha'])} · Cámara {e['cam_id']} · {e['razon']}",
         ).add_to(mapa)
 
-    salida = st_folium(mapa, height=380, use_container_width=True,
+    salida = st_folium(mapa, height=360, use_container_width=True,
                        returned_objects=["center", "zoom"], key="mapa")
     if salida and salida.get("center") and salida.get("zoom"):
         st.session_state.mapa_vista = {
@@ -710,27 +616,24 @@ def vista_mapa():
 
     st.markdown(
         '<div class="leyenda">'
-        '<span><i style="background:#00C853"></i>Cámara activa</span>'
+        '<span><i style="background:#00C853"></i>Activa</span>'
         '<span><i style="background:#9E9E9E"></i>Sin conexión</span>'
-        '<span><i style="background:#FF5252"></i>Posible robo</span>'
-        '<span><i style="background:#FFB300"></i>Pico de sonido</span></div>',
+        '<span><i style="background:#FF5252"></i>Robo</span>'
+        '<span><i style="background:#FFB300"></i>Sonido</span></div>',
         unsafe_allow_html=True)
 
-    tabla = pd.DataFrame(nodos)[["id", "zona", "activo", "bateria", "velocidad", "fps", "ultimo_db", "ultima_vez"]]
+    tabla = pd.DataFrame(nodos)[["id", "zona", "activo", "bateria", "ultimo_db", "ultima_vez"]]
     tabla["activo"] = tabla["activo"].map({True: "EN VIVO", False: "Sin conexión"})
-    tabla.columns = ["Cámara", "Zona", "Estado", "Batería", "Velocidad km/h", "FPS", "Sonido dB", "Última señal"]
+    tabla.columns = ["Cámara", "Zona", "Estado", "Batería", "Sonido dB", "Última señal"]
     st.dataframe(tabla, hide_index=True, use_container_width=True)
 
 
 def vista_eventos():
     st.markdown('<h2>Eventos</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Picos de sonido y movimientos bruscos registrados.</div>',
-                unsafe_allow_html=True)
 
-    with st.container(border=True):
-        c1, c2 = st.columns(2)
-        horas = c1.slider("Últimas horas", 1, 24, 24, key="ev_horas")
-        cantidad = c2.slider("Cantidad máxima", 5, 100, 30, key="ev_n")
+    c1, c2 = st.columns(2)
+    horas = c1.slider("Últimas horas", 1, 24, 24, key="ev_horas")
+    cantidad = c2.slider("Cantidad máxima", 5, 100, 30, key="ev_n")
 
     eventos = api_get("/api/eventos", horas=horas, limit=cantidad)
     if eventos is None:
@@ -752,7 +655,6 @@ def vista_eventos():
 
 def vista_analisis():
     st.markdown('<h2>Análisis</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Eventos registrados por hora del día.</div>', unsafe_allow_html=True)
 
     nodos = api_get("/api/estado_nodos") or []
     ids = [n["id"] for n in nodos]
@@ -760,8 +662,7 @@ def vista_analisis():
         st.markdown('<div class="aviso">No hay cámaras creadas todavía.</div>', unsafe_allow_html=True)
         return
 
-    with st.container(border=True):
-        seleccion = st.selectbox("Cámara", ["Todas"] + ids, key="an_cam")
+    seleccion = st.selectbox("Cámara", ["Todas"] + ids, key="an_cam")
     cam = None if seleccion == "Todas" else seleccion
 
     est = api_get("/api/estadisticas", cam_id=cam) or {"por_hora": [], "por_tipo": []}
@@ -800,7 +701,7 @@ col_logo, col_tema = st.columns([3, 2], vertical_alignment="center")
 with col_logo:
     st.markdown(f'<div class="logo">{LOGO_SVG}<span>EcoGuard</span></div>', unsafe_allow_html=True)
 with col_tema:
-    st.toggle("☀️ Modo claro", key="claro")
+    st.toggle("Modo claro", key="claro")
 
 OPCIONES = ["Cámara", "Cuadrícula", "Mapa", "Eventos", "Análisis", "Crear"]
 seccion = st.radio("Sección", OPCIONES, horizontal=True, label_visibility="collapsed", key="vista")
