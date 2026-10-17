@@ -8,30 +8,73 @@
 <style>
 html, body { margin:0; height:100%; background:#000; font-family:Roboto, system-ui, sans-serif; color:#EDF7F0; }
 #mapa { height:100%; width:100%; }
-#top { position:absolute; z-index:500; top:10px; left:10px; background:rgba(11,16,12,.92);
-       border:1px solid #1F2B22; border-radius:10px; padding:10px 14px; font-size:14px; }
+#top { position:absolute; z-index:500; top:10px; left:10px; right:10px; max-width:340px;
+       background:rgba(11,16,12,.92); border:1px solid #1F2B22; border-radius:10px; padding:10px 14px; font-size:14px; }
 #top b { color:#00E676; font-size:16px; }
-.leaflet-popup-content { color:#000; font-size:14px; line-height:1.5; }
+#leyenda { color:#8FA397; font-size:12px; margin-top:4px; }
+.leaflet-popup-content { color:#000; font-size:14px; line-height:1.5; margin:10px 12px; }
+.marca { border-radius:50%; border:3px solid #fff; box-shadow:0 0 0 2px rgba(0,0,0,.4); }
+.marca-on { background:#00E676; }
+.marca-off { background:#777; }
+.marca-evento { border-radius:50%; border:2px solid #000; }
 </style>
 </head>
 <body>
-<div id="top"><b>EcoGuard · Mapa en vivo</b><div id="estado">Cargando…</div></div>
+<div id="top">
+  <b>EcoGuard · Mapa en vivo</b>
+  <div id="estado">Cargando…</div>
+  <div id="leyenda">🟢 cámara en vivo · ⚫ sin conexión · 🔴 posible robo · 🟠 pico de sonido (24 h)</div>
+</div>
 <div id="mapa"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+// Estilos de CARTO (sin clave):
+//   dark_all   → oscuro, combina con EcoGuard
+//   light_all  → claro, más legible de día
+//   rastertiles/voyager → mapa de calles clásico con colores
+const ESTILO = "dark_all";
+
 const mapa = L.map("mapa").setView([19.4326, -99.1332], 5);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-  { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19 }).addTo(mapa);
+
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/${ESTILO}/{z}/{x}/{y}{r}.png`, {
+  subdomains: "abcd",
+  maxZoom: 20,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+}).addTo(mapa);
 
 const capaNodos = L.layerGroup().addTo(mapa);
 const capaEventos = L.layerGroup().addTo(mapa);
 let centrado = false;
 
+function marcaNodo(activo) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="marca ${activo ? "marca-on" : "marca-off"}" style="width:22px;height:22px"></div>`,
+    iconSize: [22, 22], iconAnchor: [11, 11]
+  });
+}
+
+function marcaEvento(robo) {
+  const color = robo ? "#FF5252" : "#FFB300";
+  return L.divIcon({
+    className: "",
+    html: `<div class="marca-evento" style="width:16px;height:16px;background:${color}"></div>`,
+    iconSize: [16, 16], iconAnchor: [8, 8]
+  });
+}
+
+function escapar(texto) {
+  return String(texto ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 async function actualizar() {
   try {
     const r = await fetch("/api/mapa.geojson", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
     const g = await r.json();
+
     capaNodos.clearLayers();
     capaEventos.clearLayers();
     const puntos = [];
@@ -45,31 +88,32 @@ async function actualizar() {
       if (p.tipo === "nodo") {
         total++;
         if (p.activo) enVivo++;
-        L.circleMarker([lat, lon], {
-          radius: 10, weight: 2, fillOpacity: .9,
-          color: p.activo ? "#00C853" : "#9E9E9E",
-          fillColor: p.activo ? "#00E676" : "#555"
-        }).bindPopup(
-          `<b>${p.nombre}</b><br>Estado: ${p.activo ? "EN VIVO" : "Sin conexión"}<br>` +
-          `Zona: ${p.zona}<br>Batería: ${p.bateria}<br>Última señal: ${p.ultima_vez || "N/D"}`
-        ).addTo(capaNodos);
+        L.marker([lat, lon], { icon: marcaNodo(p.activo) })
+          .bindPopup(
+            `<b>${escapar(p.nombre)}</b><br>` +
+            `Estado: ${p.activo ? "EN VIVO" : "Sin conexión"}<br>` +
+            `Zona: ${escapar(p.zona)}<br>` +
+            `Batería: ${escapar(p.bateria)}<br>` +
+            `Última señal: ${escapar(p.ultima_vez || "N/D")}`
+          )
+          .addTo(capaNodos);
       } else {
         const robo = p.tipo_evento === "robo";
-        L.circleMarker([lat, lon], {
-          radius: 8, fillOpacity: .8, weight: 1,
-          color: robo ? "#FF5252" : "#FFB300",
-          fillColor: robo ? "#FF5252" : "#FFB300"
-        }).bindPopup(
-          `<b>${robo ? "Posible robo" : "Pico de sonido"}</b><br>${p.razon}<br>${p.fecha}`
-        ).addTo(capaEventos);
+        L.marker([lat, lon], { icon: marcaEvento(robo) })
+          .bindPopup(
+            `<b>${robo ? "Posible robo" : "Pico de sonido"}</b><br>` +
+            `${escapar(p.razon)}<br>${escapar(p.fecha)}`
+          )
+          .addTo(capaEventos);
       }
     }
 
     if (!centrado && puntos.length) {
-      mapa.fitBounds(puntos, { padding: [40, 40], maxZoom: 15 });
+      mapa.fitBounds(puntos, { padding: [60, 60], maxZoom: 15 });
       centrado = true;
     }
-    document.getElementById("estado").textContent = `${enVivo} de ${total} cámaras en vivo`;
+    document.getElementById("estado").textContent =
+      total ? `${enVivo} de ${total} cámaras en vivo` : "No hay cámaras creadas";
   } catch (e) {
     document.getElementById("estado").textContent = "Sin conexión con el servidor";
   }
