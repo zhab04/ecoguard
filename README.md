@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # EcoGuard - Red de Vigilancia Solar y Comunitaria
 
 Proyecto desarrollado para el **Rally Latinoamericano de Innovación**.
@@ -46,3 +47,6 @@ Los navegadores solo dan acceso a cámara, micrófono y sensores en **HTTPS** o 
 - **Movimiento brusco:** es una heurística. Golpes o manipular el teléfono pueden disparar la alarma; ajusta `umbralMovimiento` en `cliente.html`.
 - **Privacidad:** grabar audio y video de personas requiere avisarles y, en México, cumplir la LFPDPPP.
 - **Seguridad:** los PIN viajan en la URL del video. Usa PIN largos y cámbialos periódicamente.
+=======
+# ecoguard
+>>>>>>> f368bb51ca6735a616620e234fc7ed54cdc8e10b
