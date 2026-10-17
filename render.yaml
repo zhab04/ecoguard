@@ -2,7 +2,7 @@ services:
   - type: web
     name: ecoguard-servidor
     runtime: python
-    plan: starter            # necesario para usar disco persistente
+    plan: free               # Cambiado a free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -k eventlet -w 1 --timeout 0 --bind 0.0.0.0:$PORT server:app
     healthCheckPath: /
