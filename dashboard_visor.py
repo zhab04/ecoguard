@@ -389,7 +389,7 @@ def vista_cuadricula():
 def vista_mapa():
     st.markdown('<h2>Mapa de nodos</h2>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Estado, zona y eventos recientes de cada cámara. '
-                'Se actualiza cada 5 segundos.</div>', unsafe_allow_html=True)
+                'Se actualiza cada 5 segundos sin mover tu vista.</div>', unsafe_allow_html=True)
     st.markdown(f"Mapa público para compartir: [{SERVER_URL}/mapa]({SERVER_URL}/mapa)")
 
     nodos = api_get("/api/estado_nodos")
@@ -401,8 +401,15 @@ def vista_mapa():
         return
 
     eventos = api_get("/api/eventos", horas=24, limit=200) or []
-    centro = [sum(n["lat"] for n in nodos) / len(nodos), sum(n["lon"] for n in nodos) / len(nodos)]
-    mapa = folium.Map(location=centro, zoom_start=14 if len(nodos) > 1 else 16,
+
+    # Vista actual del mapa: se conserva lo que el usuario movió o acercó.
+    # Solo la primera vez se calcula el centro a partir de los nodos.
+    if "mapa_vista" not in st.session_state:
+        centro = [sum(n["lat"] for n in nodos) / len(nodos), sum(n["lon"] for n in nodos) / len(nodos)]
+        st.session_state.mapa_vista = {"centro": centro, "zoom": 14 if len(nodos) > 1 else 16}
+
+    vista = st.session_state.mapa_vista
+    mapa = folium.Map(location=vista["centro"], zoom_start=vista["zoom"],
                       tiles=TILES_BASE, attr=ATRIBUCION_MAPA)
     folium.TileLayer(tiles=TILES_ETIQUETAS, attr=ATRIBUCION_MAPA, name="Etiquetas").add_to(mapa)
 
@@ -440,7 +447,15 @@ def vista_mapa():
             tooltip=f"{e['fecha'][11:16]} · Cámara {e['cam_id']} · {e['razon']}",
         ).add_to(mapa)
 
-    st_folium(mapa, height=540, use_container_width=True, returned_objects=[], key="mapa")
+    # Guardamos la vista que el usuario deja cada vez que mueve o acerca el mapa
+    salida = st_folium(mapa, height=540, use_container_width=True,
+                       returned_objects=["center", "zoom"], key="mapa")
+    if salida and salida.get("center") and salida.get("zoom"):
+        st.session_state.mapa_vista = {
+            "centro": [salida["center"]["lat"], salida["center"]["lng"]],
+            "zoom": salida["zoom"],
+        }
+
     st.caption("🟢 cámara activa · ⚫ sin conexión · 🔴 posible robo (24 h) · 🟠 pico de sonido (24 h)")
 
     tabla = pd.DataFrame(nodos)[["id", "zona", "activo", "bateria", "velocidad", "fps", "ultimo_db", "ultima_vez"]]
@@ -471,20 +486,4 @@ def vista_analisis():
     st.markdown("#### Eventos recientes")
     eventos = api_get("/api/eventos", cam_id=cam, limit=200) or []
     if not eventos:
-        st.markdown('<div class="empty-box">Sin eventos registrados.</div>', unsafe_allow_html=True)
-        return
-    t = pd.DataFrame(eventos)[["fecha", "cam_id", "tipo", "razon", "valor", "lat", "lon"]]
-    t.columns = ["Fecha", "Cámara", "Tipo", "Razón", "Valor", "Lat", "Lon"]
-    st.dataframe(t, hide_index=True, use_container_width=True)
-
-
-if modo == "Crear cámara":
-    vista_registro()
-elif modo == "Cámara individual":
-    vista_individual()
-elif modo == "Cuadrícula de cámaras":
-    vista_cuadricula()
-elif modo == "Mapa de nodos":
-    vista_mapa()
-elif modo == "Análisis de datos":
-    vista_analisis()
+        st.markdown('<div class="empty-box">Sin eventos
