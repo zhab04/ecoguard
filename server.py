@@ -64,7 +64,7 @@ fps_stats = {}
 telemetry = {}
 audio_estado = {}
 ultimo_evento = {}
-ZONAS = {}                 # (lat, lon) redondeados -> nombre de la zona
+ZONAS = {}
 ZONAS_PENDIENTES = set()
 ZONAS_LOCK = threading.Lock()
 
@@ -137,7 +137,8 @@ def autorizado(cam, token):
 
 
 def lista_camaras():
-    return [f["cam_id"] for f in run_db("SELECT cam_id FROM camaras ORDER BY creada", (), True)]
+    filas = run_db("SELECT cam_id FROM camaras ORDER BY creada", (), True)
+    return [f["cam_id"] for f in filas]
 
 
 def puede_registrar(cam, tipo, cooldown):
@@ -199,7 +200,7 @@ def _consultar_zona(clave):
             nombre = ", ".join(dict.fromkeys(partes[:3])) or datos.get("display_name", "Zona desconocida")
             ZONAS[clave] = nombre
     except Exception as e:
-        print("Error consultando zona:", e)  # no se guarda: se reintenta en la siguiente consulta
+        print("Error consultando zona:", e)
     finally:
         with ZONAS_LOCK:
             ZONAS_PENDIENTES.discard(clave)
@@ -262,7 +263,7 @@ def contar_frame(cam):
 # ---------------------------------------------------------------------------
 @socketio.on("registrar_camara")
 def on_registrar(data):
-    cam = str(data.get("cam_id", "")).strip()
+    cam = str(data.get("cam_id", "")).strip().lower()
     token = str(data.get("token_seguridad", ""))
     if autorizado(cam, token):
         join_room(sala(cam))
@@ -496,15 +497,24 @@ def datos_nodos():
         t = telemetry.get(cam, {})
         lat, lon = ubicacion(cam)
         visto = last_seen.get(cam)
-        nodos.append({
+        activo = bool(visto and ts - visto < ACTIVO_SEG)
+
+        ultima_vez = None
+        if visto:
+            ultima_vez = datetime.fromtimestamp(visto, ZONA).isoformat(timespec="seconds")
+
+        bat = t.get("bat")
+        bateria = f"{bat}%" if bat is not None else "N/D"
+
+        nodo = {
             "id": cam,
             "nombre": f"Nodo {cam}",
             "zona": nombre_zona(lat, lon),
             "lat": lat,
             "lon": lon,
             "precision_m": t.get("precision"),
-            "activo": bool(visto and ts - visto < ACTIVO_SEG),
-            "bateria": f"{t['bat']}%" if t.get("bat") is not None else "N/D",
+            "activo": activo,
+            "bateria": bateria,
             "cargando": t.get("cargando", False),
             "velocidad": t.get("velocidad"),
             "rumbo": t.get("rumbo"),
@@ -516,5 +526,116 @@ def datos_nodos():
             "grabando": t.get("grabando", False),
             "fps": fps_stats.get(cam, {}).get("fps", 0),
             "calidad": t.get("calidad"),
-            "ultima_vez": (datetime.fromtimestamp(visto, ZONA).isoformat(timespec="seconds")
-                           if visto else None),
+            "ultima_vez": ultima_vez,
+        }
+        nodos.append(nodo)
+    return nodos
+
+
+@app.route("/api/estado_nodos")
+def api_estado_nodos():
+    return jsonify(datos_nodos())
+
+
+@app.route("/api/mapa.geojson")
+def api_mapa_geojson():
+    """Datos del mapa en GeoJSON: nodos y eventos de las últimas 24 h.
+    Los IDs salen enmascarados."""
+    features = []
+    for n in datos_nodos():
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [n["lon"], n["lat"]]},
+            "properties": {
+                "tipo": "nodo",
+                "nombre": f"Nodo ···{n['id'][-4:]}",
+                "activo": n["activo"],
+                "zona": n["zona"],
+                "bateria": n["bateria"],
+                "ultima_vez": n["ultima_vez"],
+            },
+        })
+    desde = (datetime.now(ZONA) - timedelta(hours=24)).isoformat(timespec="seconds")
+    eventos = run_db(
+        "SELECT tipo, razon, fecha, lat, lon FROM eventos WHERE fecha>=? AND lat IS NOT NULL "
+        "ORDER BY id DESC LIMIT 200", (desde,), True)
+    for e in eventos:
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [e["lon"], e["lat"]]},
+            "properties": {"tipo": "evento", "tipo_evento": e["tipo"],
+                           "razon": e["razon"], "fecha": e["fecha"]},
+        })
+    return jsonify(type="FeatureCollection", features=features)
+
+
+@app.route("/api/eventos")
+def api_eventos():
+    cam = request.args.get("cam_id")
+    horas = float(request.args.get("horas", 0) or 0)
+    limite = min(int(request.args.get("limit", 100)), 500)
+    condiciones, params = [], []
+    if cam:
+        condiciones.append("cam_id=?")
+        params.append(cam)
+    if horas:
+        desde = datetime.now(ZONA) - timedelta(hours=horas)
+        condiciones.append("fecha>=?")
+        params.append(desde.isoformat(timespec="seconds"))
+    where = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    sql = f"SELECT * FROM eventos {where} ORDER BY id DESC LIMIT ?"
+    return jsonify(run_db(sql, (*params, limite), True))
+
+
+@app.route("/api/estadisticas")
+def api_estadisticas():
+    cam = request.args.get("cam_id")
+    where, params = ("WHERE cam_id=?", (cam,)) if cam else ("", ())
+    sql_hora = (f"SELECT substr(fecha,12,2) AS hora, COUNT(*) AS total FROM eventos {where} "
+                "GROUP BY hora ORDER BY hora")
+    por_hora = run_db(sql_hora, params, True)
+    sql_tipo = f"SELECT tipo, COUNT(*) AS total FROM eventos {where} GROUP BY tipo"
+    por_tipo = run_db(sql_tipo, params, True)
+    return jsonify(por_hora=[[f["hora"], f["total"]] for f in por_hora], por_tipo=por_tipo)
+
+
+@app.route("/api/grabaciones")
+def api_grabaciones():
+    cam = request.args.get("cam_id", "")
+    sql = ("SELECT id, cam_id, inicio, duracion, bytes FROM grabaciones WHERE cam_id=? "
+           "ORDER BY id DESC LIMIT 50")
+    filas = run_db(sql, (cam,), True)
+    for f in filas:
+        f["ruta"] = f"/grabaciones/{f['id']}"
+    return jsonify(filas)
+
+
+@app.route("/grabaciones/<int:rid>/<token>")
+def ver_grabacion(rid, token):
+    fila = run_db("SELECT cam_id, archivo FROM grabaciones WHERE id=?", (rid,), True)
+    if not fila or not autorizado(fila[0]["cam_id"], token):
+        abort(403)
+    return send_file(os.path.join(REC_DIR, fila[0]["archivo"]),
+                     mimetype="video/webm", conditional=True)
+
+
+ACCIONES = {"start_recording", "stop_recording", "mute_audio", "unmute_audio",
+            "calidad_alta", "calidad_baja"}
+
+
+@app.route("/api/comando", methods=["POST"])
+def api_comando():
+    datos = request.get_json(silent=True) or {}
+    cam = str(datos.get("cam_id", "")).strip().lower()
+    pin = str(datos.get("pin", "")).strip().lower()
+    if not autorizado(cam, pin):
+        return jsonify(error="ID o PIN incorrecto"), 403
+    accion = datos.get("accion")
+    if accion not in ACCIONES:
+        return jsonify(error="Acción no válida"), 400
+    socketio.emit("comando", {"accion": accion}, to=sala(cam))
+    return jsonify(ok=True)
+
+
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT") or 5000), debug=False)
