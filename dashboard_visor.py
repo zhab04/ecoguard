@@ -486,4 +486,20 @@ def vista_analisis():
     st.markdown("#### Eventos recientes")
     eventos = api_get("/api/eventos", cam_id=cam, limit=200) or []
     if not eventos:
-        st.markdown('<div class="empty-box">Sin eventos
+        st.markdown('<div class="empty-box">Sin eventos registrados.</div>', unsafe_allow_html=True)
+        return
+    t = pd.DataFrame(eventos)[["fecha", "cam_id", "tipo", "razon", "valor", "lat", "lon"]]
+    t.columns = ["Fecha", "Cámara", "Tipo", "Razón", "Valor", "Lat", "Lon"]
+    st.dataframe(t, hide_index=True, use_container_width=True)
+
+
+if modo == "Crear cámara":
+    vista_registro()
+elif modo == "Cámara individual":
+    vista_individual()
+elif modo == "Cuadrícula de cámaras":
+    vista_cuadricula()
+elif modo == "Mapa de nodos":
+    vista_mapa()
+elif modo == "Análisis de datos":
+    vista_analisis()
