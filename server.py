@@ -117,3 +117,22 @@ def autorizado(cam, token):
     return hmac.compare_digest(esperado.encode(), str(token).encode())
 
 def puede_registrar(cam, tipo, cooldown):
+    clave = (cam, tipo)
+    t = time.time()
+    if t - ultimo_evento.get(clave, 0) < cooldown:
+        return False
+    ultimo_evento[clave] = t
+    return True
+
+def ubicacion(cam):
+    t = telemetry.get(cam, {})
+    if t.get("lat") is not None:
+        return t["lat"], t["lon"]
+    fila = run_db("SELECT lat, lon FROM nodos WHERE cam_id=?", (cam,), True)
+    if fila and fila[0]["lat"] is not None:
+        return fila[0]["lat"], fila[0]["lon"]
+    return LAT_DEF, LON_DEF
+
+def guardar_ubicacion(cam, lat, lon):
+    run_db(
+        "INSERT INTO nodos (cam_id, lat, lon, actualizado) VALUES (?,
