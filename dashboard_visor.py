@@ -9,10 +9,8 @@ from streamlit_folium import st_folium
 
 st.set_page_config(page_title="EcoGuard", layout="wide", page_icon="🛡️")
 
-SERVER_URL = os.environ.get("ECOGUARD_SERVER_URL", "http://localhost:5000").rstrip("/")
-PIN_DEFECTO = os.environ.get("ECOGUARD_PIN_DEFECTO", "SEC-99")
+SERVER_URL = (os.environ.get("ECOGUARD_SERVER_URL") or "http://localhost:5000").rstrip("/")
 TIMEOUT = 6
-IDS_RESPALDO = ["123", "CAM-101", "CAM-102"]
 
 THEME_CSS = """
 <style>
@@ -125,7 +123,7 @@ def accion(cam, pin, accion_id, texto):
 st.sidebar.markdown(f'<div class="logo">{LOGO_SVG}<span>EcoGuard</span></div>', unsafe_allow_html=True)
 modo = st.sidebar.radio(
     "Navegación",
-    ["Cámara individual", "Cuadrícula de cámaras", "Mapa de nodos", "Análisis de datos"],
+    ["Crear cámara", "Cámara individual", "Cuadrícula de cámaras", "Mapa de nodos", "Análisis de datos"],
     label_visibility="collapsed",
 )
 
@@ -155,6 +153,34 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Vistas
 # ---------------------------------------------------------------------------
+def vista_registro():
+    st.markdown('<h2>Crear cámara</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Genera un ID y un PIN nuevos para un teléfono.</div>',
+                unsafe_allow_html=True)
+
+    if st.button("Generar ID y PIN", key="generar_camara"):
+        try:
+            r = requests.post(f"{SERVER_URL}/api/camaras", timeout=TIMEOUT)
+            datos = r.json()
+            if r.ok:
+                st.session_state.camara_nueva = datos
+            else:
+                st.session_state.camara_nueva = None
+                st.error(datos.get("error", "No se pudo crear la cámara"))
+        except (requests.RequestException, ValueError):
+            st.error("No se pudo contactar al servidor.")
+
+    nueva = st.session_state.get("camara_nueva")
+    if nueva:
+        st.success("Cámara creada. Guarda este PIN ahora: no se volverá a mostrar.")
+        st.markdown("**ID de la cámara**")
+        st.code(nueva["cam_id"])
+        st.markdown("**PIN**")
+        st.code(nueva["pin"])
+        st.markdown('<div class="empty-box">Escribe este ID y PIN en la página /cliente del teléfono, '
+                    'y en Cámara individual del dashboard.</div>', unsafe_allow_html=True)
+
+
 def vista_individual():
     st.markdown('<h2>Cámara individual</h2>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Video, audio, sensores y grabaciones de una cámara.</div>',
@@ -162,16 +188,16 @@ def vista_individual():
 
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
-        cam_id = st.text_input("ID de la cámara", value="123", key="ind_cam_id")
+        cam_id = st.text_input("ID de la cámara", key="ind_cam_id")
     with c2:
-        token = st.text_input("PIN", type="password", value=PIN_DEFECTO, key="ind_token")
+        token = st.text_input("PIN", type="password", key="ind_token")
     with c3:
         st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
         if st.button("Conectar", key="ind_connect"):
             st.session_state.ind_activa = (cam_id.strip(), token.strip())
 
     activa = st.session_state.get("ind_activa")
-    if not activa:
+    if not activa or not activa[0] or not activa[1]:
         st.markdown('<div class="empty-box">Ingresa el ID y el PIN para ver la transmisión.</div>',
                     unsafe_allow_html=True)
         return
@@ -183,8 +209,12 @@ def vista_individual():
         return
     nodo = next((n for n in nodos if n["id"] == cam), None)
     if nodo is None:
-        st.error("Esa cámara no está registrada en el servidor.")
+        st.error("Esa cámara no existe. Créala en la sección Crear cámara.")
         return
+
+    if not nodo["activo"]:
+        st.info("La cámara no está transmitiendo. En el teléfono abre /cliente, "
+                "escribe el mismo ID y PIN, y pulsa Iniciar nodo.")
 
     video_col, info_col = st.columns([3, 2], gap="large")
     with video_col:
@@ -232,34 +262,44 @@ def vista_individual():
 
 def vista_cuadricula():
     st.markdown('<h2>Cuadrícula de cámaras</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Monitorea hasta nueve cámaras al mismo tiempo.</div>',
+    st.markdown('<div class="subtitle">Monitorea hasta nueve cámaras. Cambia el ID y el PIN de cada espacio.</div>',
                 unsafe_allow_html=True)
+
     nodos = api_get("/api/estado_nodos") or []
     por_id = {n["id"]: n for n in nodos}
-    ids = list(por_id.keys()) or IDS_RESPALDO
+    ids_servidor = list(por_id.keys())
+
+    for i in range(9):
+        st.session_state.setdefault(f"id_{i}", ids_servidor[i] if i < len(ids_servidor) else "")
+        st.session_state.setdefault(f"pin_{i}", "")
+        st.session_state.setdefault(f"conn_{i}", False)
 
     for fila in range(3):
         cols = st.columns(3, gap="large")
         for c in range(3):
             i = fila * 3 + c
             with cols[c]:
-                if i >= len(ids):
-                    st.markdown('<div class="empty-box">Espacio libre</div>', unsafe_allow_html=True)
-                    continue
-                cam = ids[i]
+                cam = st.session_state[f"id_{i}"].strip()
+                pin = st.session_state[f"pin_{i}"].strip()
                 nodo = por_id.get(cam)
-                conectada = st.session_state.get(f"conn_{cam}", False)
-                pin = st.session_state.get(f"pin_{cam}", PIN_DEFECTO)
-                if conectada:
+                conectada = st.session_state[f"conn_{i}"]
+
+                if conectada and cam and pin:
                     st.markdown(thumb_html(f"{SERVER_URL}/video_feed/{cam}/{pin}"), unsafe_allow_html=True)
                 else:
                     st.markdown(thumb_html(None, "Sin conexión"), unsafe_allow_html=True)
-                st.markdown(card_meta(f"Cámara {cam}", bool(nodo and nodo["activo"]),
-                                      nodo["nombre"] if nodo else ""), unsafe_allow_html=True)
+
+                titulo = f"Cámara {cam}" if cam else f"Espacio {i + 1}"
+                st.markdown(card_meta(titulo, bool(nodo and nodo["activo"] and conectada),
+                                      nodo["nombre"] if nodo else "Sin cámara asignada"),
+                            unsafe_allow_html=True)
+
                 with st.expander("Configurar"):
-                    st.text_input("PIN", type="password", value=PIN_DEFECTO, key=f"pin_{cam}")
-                if st.button("Desconectar" if conectada else "Conectar", key=f"btn_{cam}"):
-                    st.session_state[f"conn_{cam}"] = not conectada
+                    st.text_input("ID de la cámara", key=f"id_{i}")
+                    st.text_input("PIN", type="password", key=f"pin_{i}")
+
+                if st.button("Desconectar" if conectada else "Conectar", key=f"btn_{i}", disabled=not cam):
+                    st.session_state[f"conn_{i}"] = not conectada
                     st.rerun()
         st.markdown('<hr/>', unsafe_allow_html=True)
 
@@ -275,7 +315,7 @@ def vista_mapa():
         st.error("No se pudo contactar al servidor. Revisa que el servicio de Render esté activo.")
         return
     if not nodos:
-        st.info("No hay nodos registrados.")
+        st.info("No hay cámaras creadas. Ve a Crear cámara.")
         return
 
     eventos = api_get("/api/eventos", horas=24, limit=200) or []
@@ -330,7 +370,10 @@ def vista_analisis():
     st.markdown('<div class="subtitle">Eventos registrados por hora del día.</div>', unsafe_allow_html=True)
 
     nodos = api_get("/api/estado_nodos") or []
-    ids = [n["id"] for n in nodos] or IDS_RESPALDO
+    ids = [n["id"] for n in nodos]
+    if not ids:
+        st.markdown('<div class="empty-box">No hay cámaras creadas todavía.</div>', unsafe_allow_html=True)
+        return
     seleccion = st.selectbox("Cámara", ["Todas"] + ids)
     cam = None if seleccion == "Todas" else seleccion
 
@@ -351,7 +394,9 @@ def vista_analisis():
     st.dataframe(t, hide_index=True, use_container_width=True)
 
 
-if modo == "Cámara individual":
+if modo == "Crear cámara":
+    vista_registro()
+elif modo == "Cámara individual":
     vista_individual()
 elif modo == "Cuadrícula de cámaras":
     vista_cuadricula()

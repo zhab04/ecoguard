@@ -10,8 +10,6 @@ services:
         value: 3.11.9
       - key: SECRET_KEY
         generateValue: true
-      - key: CAMERAS
-        sync: false
       - key: NTFY_URL
         sync: false
       - key: TZ_NAME
@@ -27,6 +25,4 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: ECOGUARD_SERVER_URL
-        sync: false
-      - key: ECOGUARD_PIN_DEFECTO
         sync: false

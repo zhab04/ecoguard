@@ -8,6 +8,6 @@ gunicorn==22.0.0
 streamlit==1.40.2
 folium==0.17.0
 streamlit-folium==0.22.0
+pandas==2.2.3
 requests==2.32.3
 tzdata==2024.2
-pandas
