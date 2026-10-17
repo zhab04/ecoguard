@@ -14,16 +14,19 @@ st.set_page_config(page_title="EcoGuard", layout="wide", page_icon="🛡️",
 
 SERVER_URL = (os.environ.get("ECOGUARD_SERVER_URL") or "http://localhost:5000").rstrip("/")
 TIMEOUT = 6
+RADIO = "18px"
 
 PALETA_OSCURA = {
     "bg": "#000000", "bg2": "#0B100C", "bg3": "#141C16", "line": "#1F2B22",
     "text": "#EDF7F0", "muted": "#8FA397", "accent": "#00E676", "accent2": "#00C853",
     "danger": "#FF5252", "sel": "#1B2A1F",
+    "glass": "rgba(11,16,12,0.62)", "glass2": "rgba(20,28,22,0.55)", "glass3": "rgba(0,0,0,0.35)",
 }
 PALETA_CLARA = {
     "bg": "#F3F8F4", "bg2": "#FFFFFF", "bg3": "#E8F2EB", "line": "#D2E4D7",
     "text": "#0B1A10", "muted": "#5B6F62", "accent": "#00C853", "accent2": "#00A843",
     "danger": "#E53935", "sel": "#DDF4E4",
+    "glass": "rgba(255,255,255,0.66)", "glass2": "rgba(232,242,235,0.6)", "glass3": "rgba(255,255,255,0.4)",
 }
 
 # Mapas sin clave: Esri (base + etiquetas de calles y colonias)
@@ -53,37 +56,56 @@ def css_tema(p):
     return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-:root {{ {variables} }}
+:root {{ {variables} --radio: {RADIO}; }}
 html, body, [class*="css"], .stApp, p, label, input, button, textarea {{
   font-family: 'Roboto', system-ui, sans-serif !important;
 }}
-.stApp {{ background: var(--bg); color: var(--text); }}
+.stApp {{
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(0,230,118,.10), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(0,200,83,.07), transparent 60%),
+    var(--bg);
+  color: var(--text);
+}}
 .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{ color: var(--text); }}
 header[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display: none !important; }}
-.block-container {{ padding-top: 1.2rem; padding-bottom: 6rem; max-width: 1150px; }}
+.block-container {{ padding-top: 1rem; padding-bottom: 6rem; max-width: 1150px; }}
+[data-testid="stHorizontalBlock"] {{ gap: .75rem !important; align-items: stretch; }}
+[data-testid="stVerticalBlock"] {{ gap: .75rem; }}
 h2 {{ font-size: 1.9rem !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: -.3px; }}
 
 /* Encabezado */
 .logo {{ display: flex; align-items: center; gap: 10px; font-size: 1.5rem; font-weight: 700; color: var(--text); }}
-.subtitle {{ color: var(--muted); font-size: 1rem; margin: 4px 0 14px; }}
+.subtitle {{ color: var(--muted); font-size: 1rem; margin: 4px 0 12px; }}
 
-/* Marcos de tarjeta con animación de entrada */
+/* Tarjetas: bordes alineados, fondo translúcido con desenfoque */
 [data-testid="stVerticalBlockBorderWrapper"] {{
-  background: var(--bg2) !important; border: 1px solid var(--line) !important; border-radius: 20px !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,.18); animation: fadeUp .45s ease both; padding: 4px;
+  background: var(--glass) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  backdrop-filter: blur(14px) saturate(120%);
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radio) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.04);
+  animation: fadeUp .45s ease both;
+  padding: 0 !important;
+  overflow: hidden;
 }}
+[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 14px 16px !important; }}
+[data-testid="stVerticalBlockBorderWrapper"] > div > div {{ gap: .6rem; }}
 @keyframes fadeUp {{ from {{ opacity: 0; transform: translateY(12px); }} to {{ opacity: 1; transform: none; }} }}
 @keyframes pulso {{ 0%, 100% {{ opacity: 1; transform: scale(1); }} 50% {{ opacity: .3; transform: scale(.6); }} }}
 
-/* Navegación superior en pastillas */
+/* Navegación superior en pastillas translúcidas */
 div[role="radiogroup"] {{
-  display: flex; flex-wrap: wrap; gap: 6px; background: var(--bg2); border: 1px solid var(--line);
-  border-radius: 999px; padding: 5px; margin-bottom: 14px;
+  display: flex; flex-wrap: wrap; gap: 6px; background: var(--glass);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin-bottom: 12px;
 }}
 div[role="radiogroup"] label {{
   border-radius: 999px !important; padding: 8px 14px !important; margin: 0 !important;
   transition: background .25s ease, transform .15s ease; cursor: pointer;
 }}
+div[role="radiogroup"] label:hover {{ background: var(--glass2); }}
 div[role="radiogroup"] label:active {{ transform: scale(.96); }}
 div[role="radiogroup"] label > div:first-child {{ display: none !important; }}
 div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: .95rem !important; color: var(--muted) !important; }}
@@ -93,7 +115,7 @@ div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 /* Botones */
 .stButton > button {{
   background: var(--accent); color: #000; border: 0; border-radius: 999px; font-weight: 700;
-  width: 100%; padding: .6rem 1rem; transition: transform .15s ease, filter .2s ease;
+  width: 100%; padding: .55rem 1rem; transition: transform .15s ease, filter .2s ease;
 }}
 .stButton > button:hover {{ filter: brightness(1.08); color: #000; }}
 .stButton > button:active {{ transform: scale(.97); }}
@@ -101,68 +123,73 @@ div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 
 /* Campos y sliders */
 .stTextInput input {{
-  background: var(--bg3) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
-  color: var(--text) !important; padding: .7rem .9rem !important; font-size: 1.05rem !important;
+  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
+  color: var(--text) !important; padding: .65rem .9rem !important; font-size: 1.02rem !important;
 }}
 .stTextInput input:focus {{ border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(0,230,118,.18) !important; }}
 [data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; }}
 [data-testid="stSlider"] [role="slider"] {{ background: var(--accent) !important; box-shadow: 0 0 0 4px rgba(0,230,118,.18); }}
 [data-testid="stSlider"] div[data-baseweb="slider"] > div > div:nth-child(2) {{ background: var(--accent) !important; }}
 [data-testid="stSelectbox"] div[data-baseweb="select"] > div {{
-  background: var(--bg3) !important; border-color: var(--line) !important; border-radius: 14px !important;
+  background: var(--glass2) !important; border-color: var(--line) !important; border-radius: 14px !important;
 }}
 [data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; }}
 
 /* Expansor y captions */
-[data-testid="stExpander"] {{ background: var(--bg3) !important; border: 1px solid var(--line) !important; border-radius: 14px !important; }}
+[data-testid="stExpander"] {{
+  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
+}}
 [data-testid="stExpander"] summary p {{ color: var(--muted) !important; }}
 [data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; }}
 hr {{ border-color: var(--line) !important; }}
-[data-testid="stDataFrame"] {{ border-radius: 14px; overflow: hidden; }}
+[data-testid="stDataFrame"] {{ border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }}
+[data-testid="stVideo"] video {{ border-radius: 14px; }}
 
 /* Etiquetas de estado */
 .live {{
   display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #000;
-  font-weight: 700; font-size: .8rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
+  font-weight: 700; font-size: .78rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
 }}
 .live::before {{ content: ""; width: 7px; height: 7px; border-radius: 50%; background: #000; animation: pulso 1.3s infinite; }}
 .off {{
-  display: inline-flex; align-items: center; background: var(--bg3); color: var(--muted);
-  border: 1px solid var(--line); font-weight: 600; font-size: .8rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
+  display: inline-flex; align-items: center; background: var(--glass3); color: var(--muted);
+  border: 1px solid var(--line); font-weight: 600; font-size: .78rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
 }}
-.titulo-cam {{ font-size: 1.2rem; font-weight: 700; margin-top: 10px; color: var(--text); }}
-.zona {{ color: var(--muted); font-size: .95rem; margin-top: 2px; }}
+.titulo-cam {{ font-size: 1.15rem; font-weight: 700; margin-top: 10px; color: var(--text); }}
+.zona {{ color: var(--muted); font-size: .92rem; margin-top: 2px; }}
 
-/* Video */
+/* Video: la miniatura ocupa el mismo ancho que el marco y usa el mismo radio */
 .thumb {{
-  position: relative; width: 100%; aspect-ratio: 16 / 9; background: #050805; border-radius: 16px;
-  overflow: hidden; border: 1px solid var(--line);
+  position: relative; width: 100%; aspect-ratio: 16 / 9; background: rgba(5,8,5,.55);
+  border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
 }}
 .thumb img {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }}
 .thumb .sin {{
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 8px; color: #8FA397; font-size: 1.05rem;
+  justify-content: center; gap: 8px; color: #8FA397; font-size: 1.02rem;
 }}
 
 /* Indicadores */
-.kpis {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 6px 0 12px; }}
+.kpis {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 4px 0 10px; }}
 .kpi {{
-  background: var(--bg3); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px;
-  transition: transform .2s ease;
+  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: transform .2s ease, background .2s ease;
 }}
-.kpi:hover {{ transform: translateY(-2px); }}
-.kpi small {{ display: block; color: var(--muted); font-size: .78rem; }}
-.kpi b {{ display: block; color: var(--accent); font-size: 1.35rem; margin-top: 2px; }}
+.kpi:hover {{ transform: translateY(-2px); background: var(--glass); }}
+.kpi small {{ display: block; color: var(--muted); font-size: .76rem; }}
+.kpi b {{ display: block; color: var(--accent); font-size: 1.3rem; margin-top: 2px; }}
 
 /* Leyenda */
 .leyenda {{ display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: .85rem; margin: 6px 0; }}
 .leyenda i {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }}
 
 /* Lista animada */
-.al {{ display: flex; flex-direction: column; gap: 8px; }}
+.al {{ display: flex; flex-direction: column; gap: 6px; }}
 .al-item {{
-  background: var(--bg3); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px;
   display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   opacity: 0; transform: translateX(-18px); animation: entra .4s ease forwards;
   animation-delay: calc(var(--i) * 60ms); transition: background .2s ease, transform .2s ease;
 }}
@@ -172,10 +199,11 @@ hr {{ border-color: var(--line) !important; }}
 .al-desc {{ color: var(--muted); font-size: .88rem; margin-top: 2px; }}
 .al-meta {{ color: var(--muted); font-size: .8rem; white-space: nowrap; }}
 .vacio {{
-  text-align: center; color: var(--muted); padding: 28px 10px; border: 1px dashed var(--line); border-radius: 14px;
+  text-align: center; color: var(--muted); padding: 26px 10px; border: 1px dashed var(--line);
+  border-radius: 14px; background: var(--glass3);
 }}
 .aviso {{
-  background: var(--bg3); border: 1px dashed var(--line); border-radius: 16px; padding: 22px;
+  background: var(--glass3); border: 1px dashed var(--line); border-radius: 14px; padding: 20px;
   text-align: center; color: var(--muted);
 }}
 
@@ -248,10 +276,11 @@ def hora_de(fecha):
 # Plantillas de componentes HTML (audio y hablar), con colores del tema
 # ---------------------------------------------------------------------------
 PLANTILLA_AUDIO = """
-<div style="font-family:Roboto,sans-serif;color:__TEXT__;background:__BG2__;border:1px solid __LINE__;
-            border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<div style="font-family:Roboto,sans-serif;color:__TEXT__;background:__GLASS__;border:1px solid __LINE__;
+            border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+            backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box">
   <audio id="a" src="__URL__" autoplay></audio>
-  <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:9px 16px;
+  <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:8px 14px;
           font-weight:700;cursor:pointer">🔇 Silenciar</button>
   <span style="color:__MUTED__;font-size:13px">🔊</span>
   <input id="v" type="range" min="0" max="100" value="100" style="flex:1;min-width:120px;accent-color:__ACCENT__">
@@ -268,10 +297,10 @@ a.play().catch(() => {});
 """
 
 PLANTILLA_HABLAR = """
-<div style="font-family:Roboto,sans-serif;background:__BG2__;border:1px solid __LINE__;
-            border-radius:16px;padding:12px">
+<div style="font-family:Roboto,sans-serif;background:__GLASS__;border:1px solid __LINE__;
+            border-radius:14px;padding:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box">
   <button id="h" style="width:100%;background:__ACCENT__;color:#000;border:0;border-radius:999px;
-          padding:12px;font-weight:700;font-size:16px;cursor:pointer;user-select:none;touch-action:none">
+          padding:11px;font-weight:700;font-size:15px;cursor:pointer;user-select:none;touch-action:none">
     🎙️ Mantén presionado para hablar</button>
   <div id="s" style="color:__MUTED__;font-size:13px;margin-top:6px">Micrófono apagado</div>
 </div>
@@ -339,7 +368,7 @@ def render_plantilla(plantilla, reemplazos):
 
 
 def colores_iframe(p):
-    return {"__TEXT__": p["text"], "__BG2__": p["bg2"], "__LINE__": p["line"],
+    return {"__TEXT__": p["text"], "__GLASS__": p["glass"], "__LINE__": p["line"],
             "__ACCENT__": p["accent"], "__MUTED__": p["muted"], "__DANGER__": p["danger"]}
 
 
@@ -348,7 +377,7 @@ def reproductor_audio(cam, pin):
         **colores_iframe(paleta_actual()),
         "__URL__": f"{SERVER_URL}/audio_feed/{cam}/{pin}",
     })
-    components.html(html_audio, height=86)
+    components.html(html_audio, height=80)
 
 
 def boton_hablar(cam, pin):
@@ -358,7 +387,7 @@ def boton_hablar(cam, pin):
         "__CAM__": json.dumps(cam),
         "__PIN__": json.dumps(pin),
     })
-    components.html(html_hablar, height=110)
+    components.html(html_hablar, height=104)
 
 
 def accion(cam, pin, accion_id, texto):
@@ -424,13 +453,12 @@ def vista_camara():
                 unsafe_allow_html=True)
 
     with st.container(border=True):
-        c1, c2, c3 = st.columns([3, 3, 2])
+        c1, c2, c3 = st.columns([3, 3, 2], vertical_alignment="bottom")
         with c1:
             cam_id = st.text_input("ID de la cámara", key="ind_cam_id", placeholder="cam-tigre-27")
         with c2:
             token = st.text_input("PIN", type="password", key="ind_token", placeholder="tigre482")
         with c3:
-            st.markdown('<div style="height:28px"></div>', unsafe_allow_html=True)
             if st.button("Conectar", key="ind_connect"):
                 st.session_state.ind_activa = (cam_id.strip().lower(), token.strip().lower())
 
@@ -454,7 +482,7 @@ def vista_camara():
         st.info("La cámara no está transmitiendo. En el teléfono abre /cliente, escribe el ID y PIN "
                 "y pulsa Iniciar nodo.")
 
-    izquierda, derecha = st.columns([3, 2], gap="large")
+    izquierda, derecha = st.columns([3, 2], gap="medium")
     with izquierda:
         with st.container(border=True):
             st.markdown(thumb_html(f"{SERVER_URL}/video_feed/{cam}/{pin}", "Buscando señal…"),
@@ -556,7 +584,7 @@ def vista_cuadricula():
     fila = None
     for i in range(9):
         if i % columnas == 0:
-            fila = st.columns(columnas, gap="medium")
+            fila = st.columns(columnas, gap="small")
         with fila[i % columnas]:
             ranura_cuadricula(i, por_id)
 
@@ -586,8 +614,8 @@ def vista_mapa():
         st.session_state.mapa_vista = {"centro": centro, "zoom": 14 if len(nodos) > 1 else 16}
 
     base_url, ref_url = MAPA_CLARO if st.session_state.get("claro", False) else MAPA_OSCURO
-    vista = st.session_state.mapa_vista
-    mapa = folium.Map(location=vista["centro"], zoom_start=vista["zoom"],
+    vista_mapa_actual = st.session_state.mapa_vista
+    mapa = folium.Map(location=vista_mapa_actual["centro"], zoom_start=vista_mapa_actual["zoom"],
                       tiles=base_url, attr=ATRIBUCION_MAPA)
     folium.TileLayer(tiles=ref_url, attr=ATRIBUCION_MAPA, name="Etiquetas",
                      overlay=True, control=False).add_to(mapa)
@@ -729,7 +757,7 @@ with col_tema:
     st.toggle("☀️ Modo claro", key="claro")
 
 OPCIONES = ["Cámara", "Cuadrícula", "Mapa", "Eventos", "Análisis", "Crear"]
-vista = st.radio("Sección", OPCIONES, horizontal=True, label_visibility="collapsed", key="vista")
+seccion = st.radio("Sección", OPCIONES, horizontal=True, label_visibility="collapsed", key="vista")
 
 VISTAS = {
     "Cámara": vista_camara,
@@ -739,4 +767,4 @@ VISTAS = {
     "Análisis": vista_analisis,
     "Crear": vista_crear,
 }
-VISTAS[vista]()
+VISTAS[seccion]()
