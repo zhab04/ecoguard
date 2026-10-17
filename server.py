@@ -218,7 +218,8 @@ def generar_id():
 
 
 def generar_pin():
-    return f"{palabra()}-{palabra()}-{palabra()}-{secrets.randbelow(90) + 10}"
+    # Una palabra + 3 números aleatorios, por ejemplo: tigre482
+    return f"{palabra()}{secrets.randbelow(900) + 100}"
 
 
 def enviar_push(titulo, texto):
