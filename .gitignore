@@ -2,3 +2,17 @@ data/
 *.db
 grabaciones/
 .venv/
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+venv312/
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configuración local de IDEs
+.vscode/
+.idea/
