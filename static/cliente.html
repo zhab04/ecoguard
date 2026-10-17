@@ -29,8 +29,8 @@ video,canvas{width:100%;border-radius:12px;background:#050805;display:block}
 <h1>🛡️ EcoGuard · Nodo</h1>
 
 <div class="card" id="login">
-  <label>ID de la cámara</label><input id="cam" autocomplete="off" />
-  <label>PIN</label><input id="pin" type="password" autocomplete="off" />
+  <label>ID de la cámara</label><input id="cam" autocomplete="off" autocapitalize="none" />
+  <label>PIN</label><input id="pin" type="password" autocomplete="off" autocapitalize="none" />
   <button id="iniciar">Iniciar nodo</button>
   <div id="msgLogin" class="off"></div>
 </div>
@@ -64,15 +64,18 @@ let gps = {}, bat = null, cargando = null, orient = null, movimiento = null, luz
 let audioCtx = null, analyser = null, audioMuted = false, recAudio = null;
 let grabando = false, recVideo = null, baseline = [], ultimoSonido = 0, ultimoMov = 0;
 let wakeLock = null;
+let ctxSalida = null, tSiguiente = 0, operadorHablando = false, timerOperador = null;
 
 try { $("cam").value = localStorage.getItem("eco_cam") || ""; } catch (e) {}
 
 // ---------- Arranque (dentro del gesto del usuario) ----------
 $("iniciar").onclick = async () => {
   pedirPermisoMovimiento();   // iOS exige el permiso dentro del gesto del usuario
-  cam = $("cam").value.trim(); pin = $("pin").value.trim();
+  cam = $("cam").value.trim().toLowerCase();
+  pin = $("pin").value.trim().toLowerCase();
   if (!cam || !pin) { $("msgLogin").textContent = "Escribe el ID y el PIN"; return; }
   try { localStorage.setItem("eco_cam", cam); } catch (e) {}
+  desbloquearSalida();   // permite que el audio del operador suene en el teléfono
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: "environment" }, width: { ideal: CFG.ancho },
@@ -104,6 +107,38 @@ function conectar() {
   socket.on("registro_error", d => { registrado = false; mensaje(d.motivo); });
   socket.on("disconnect", () => { registrado = false; mensaje("Sin conexión, reintentando…"); });
   socket.on("comando", c => ejecutarComando(c.accion));
+  socket.on("audio_entrante", reproducirEntrante);
+}
+
+// ---------- Barra de información sobre el video ----------
+// Se dibuja en cada cuadro antes de enviarlo, así aparece en el servidor y en el dashboard.
+function dibujarBarraInfo(ctx, w, h) {
+  const alto = Math.round(h * 0.13);
+  const pad = Math.round(alto * 0.18);
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(0, 0, w, alto);
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+
+  ctx.fillStyle = "#00E676";
+  ctx.font = `bold ${Math.round(alto * 0.34)}px Roboto, Arial, sans-serif`;
+  ctx.fillText(`EcoGuard · Cámara ${cam}`, pad, alto * 0.3);
+
+  ctx.fillStyle = "#EDF7F0";
+  ctx.font = `${Math.round(alto * 0.26)}px Roboto, Arial, sans-serif`;
+  const pos = gps.lat != null
+    ? `${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)} (±${gps.acc} m)`
+    : "GPS buscando…";
+  const bateria = bat != null ? `${bat}%${cargando ? " ⚡" : ""}` : "N/D";
+  const vel = gps.speed != null ? `  ·  ${gps.speed} km/h` : "";
+  ctx.fillText(`${pos}  ·  Bat ${bateria}${vel}`, pad, alto * 0.7);
+
+  ctx.textAlign = "right";
+  const hora = new Date().toLocaleString("es-MX", {
+    timeZone: "America/Mexico_City", hour12: false
+  });
+  ctx.fillText(hora, w - pad, alto * 0.3);
+  ctx.textAlign = "left";
 }
 
 // ---------- Video ----------
@@ -116,6 +151,7 @@ async function bucleVideo() {
       captura.width = Math.round(video.videoWidth * escala);
       captura.height = Math.round(video.videoHeight * escala);
       ctx.drawImage(video, 0, 0, captura.width, captura.height);
+      dibujarBarraInfo(ctx, captura.width, captura.height);
       const blob = await new Promise(r => captura.toBlob(r, "image/jpeg", calidad));
       if (blob && socket.connected) {
         const buf = await blob.arrayBuffer();
@@ -160,6 +196,34 @@ async function bucleTelemetria() {
     mostrarEstado();
     await sleep(CFG.telemetriaMs);
   }
+}
+
+// ---------- Hablar: audio del operador hacia el teléfono ----------
+function desbloquearSalida() {
+  try {
+    if (!ctxSalida) ctxSalida = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctxSalida.state === "suspended") ctxSalida.resume();
+  } catch (e) {}
+}
+
+function reproducirEntrante(d) {
+  if (!ctxSalida) desbloquearSalida();
+  if (!ctxSalida) return;
+  if (!operadorHablando) { operadorHablando = true; mensaje("🎙️ El operador está hablando"); }
+  clearTimeout(timerOperador);
+  timerOperador = setTimeout(() => { operadorHablando = false; mensaje("Conectado al servidor"); }, 800);
+
+  const pcm = new Int16Array(d.chunk);
+  const buf = ctxSalida.createBuffer(1, pcm.length, d.sr);
+  const canal = buf.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) canal[i] = pcm[i] / 32768;
+  const fuente = ctxSalida.createBufferSource();
+  fuente.buffer = buf;
+  fuente.connect(ctxSalida.destination);
+  const ahora = ctxSalida.currentTime;
+  if (tSiguiente < ahora + 0.05) tSiguiente = ahora + 0.15;   // colchón para evitar cortes
+  fuente.start(tSiguiente);
+  tSiguiente += buf.duration;
 }
 
 // ---------- Sensores ----------
@@ -342,31 +406,4 @@ function ejecutarComando(accion) {
   else if (accion === "mute_audio") silenciar(true);
   else if (accion === "unmute_audio") silenciar(false);
   else if (accion === "calidad_alta") { calidad = CFG.calidadMax; fps = CFG.fpsMax; }
-  else if (accion === "calidad_baja") { calidad = CFG.calidadMin; fps = CFG.fpsMin; }
-  mostrarEstado();
-}
-
-// ---------- Botones y pantalla ----------
-$("btnAudio").onclick = () => silenciar(!audioMuted);
-$("btnRec").onclick = () => grabando ? detenerGrabacion() : iniciarGrabacion();
-$("sensores").onclick = pedirPermisoMovimiento;
-
-function mensaje(t) { $("msg").textContent = t; }
-
-function mostrarEstado() {
-  const f = (t, v, c = "") => `<div><b>${t}</b><span class="${c}">${v ?? "N/D"}</span></div>`;
-  $("estado").innerHTML = [
-    f("Servidor", registrado ? "Conectado" : "Desconectado", registrado ? "on" : "off"),
-    f("FPS", fpsReal),
-    f("Calidad", Math.round(calidad * 100) + "%"),
-    f("GPS", gps.lat != null ? `${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)} (±${gps.acc} m)` : null),
-    f("Batería", bat != null ? bat + "%" + (cargando ? " ⚡" : "") : null),
-    f("Sonido", audioDb != null ? audioDb + " dB" : null),
-    f("Movimiento", movimiento != null ? movimiento + " m/s²" : null),
-    f("Grabación", grabando ? "● REC" : "Apagada", grabando ? "off" : "")
-  ].join("");
-  $("btnRec").textContent = grabando ? "Detener grabación" : "Iniciar grabación";
-}
-</script>
-</body>
-</html>
+  else

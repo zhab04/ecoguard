@@ -1,3 +1,4 @@
+import json
 import os
 
 import folium
@@ -112,6 +113,77 @@ def reproductor_audio(cam, pin):
     components.html(PLANTILLA_AUDIO.replace("__URL__", f"{SERVER_URL}/audio_feed/{cam}/{pin}"), height=90)
 
 
+PLANTILLA_HABLAR = """
+<div style="font-family:Roboto,sans-serif;background:#0B100C;border:1px solid #1F2B22;
+            border-radius:12px;padding:12px">
+  <button id="h" style="width:100%;background:#00E676;color:#000;border:0;border-radius:999px;
+          padding:12px;font-weight:700;font-size:16px;cursor:pointer;user-select:none;touch-action:none">
+    🎙️ Mantén presionado para hablar</button>
+  <div id="s" style="color:#8FA397;font-size:13px;margin-top:6px">Micrófono apagado</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+const SERVER = __SERVER__, CAM = __CAM__, PIN = __PIN__;
+const btn = document.getElementById('h'), est = document.getElementById('s');
+const sock = io(SERVER, { transports: ["websocket", "polling"] });
+let ctx = null, proc = null, stream = null, hablando = false;
+
+async function preparar() {
+  if (ctx) return;
+  stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  proc = ctx.createScriptProcessor(4096, 1, 1);
+  const silencio = ctx.createGain();
+  silencio.gain.value = 0;
+  proc.onaudioprocess = e => {
+    if (!hablando) return;
+    const f = e.inputBuffer.getChannelData(0);
+    const i16 = new Int16Array(f.length);
+    for (let i = 0; i < f.length; i++) {
+      const s = Math.max(-1, Math.min(1, f[i]));
+      i16[i] = s < 0 ? s * 32768 : s * 32767;
+    }
+    sock.emit("hablar_chunk", { cam_id: CAM, token: PIN, chunk: i16.buffer, sr: ctx.sampleRate });
+  };
+  src.connect(proc);
+  proc.connect(silencio);
+  silencio.connect(ctx.destination);
+}
+
+async function iniciar(e) {
+  e.preventDefault();
+  try {
+    await preparar();
+    if (ctx.state === "suspended") await ctx.resume();
+    hablando = true;
+    btn.style.background = "#FF5252";
+    est.textContent = "🔴 Hablando al teléfono…";
+  } catch (err) {
+    est.textContent = "No se pudo usar el micrófono: " + err.message;
+  }
+}
+
+function parar() {
+  if (!hablando) return;
+  hablando = false;
+  btn.style.background = "#00E676";
+  est.textContent = "Micrófono apagado";
+}
+
+btn.addEventListener("pointerdown", iniciar);
+["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, parar));
+</script>
+"""
+
+
+def boton_hablar(cam, pin):
+    html = (PLANTILLA_HABLAR.replace("__SERVER__", json.dumps(SERVER_URL))
+                            .replace("__CAM__", json.dumps(cam))
+                            .replace("__PIN__", json.dumps(pin)))
+    components.html(html, height=110)
+
+
 def accion(cam, pin, accion_id, texto):
     ok, msg = api_post("/api/comando", {"cam_id": cam, "pin": pin, "accion": accion_id})
     (st.toast if ok else st.error)(texto if ok else msg)
@@ -194,7 +266,7 @@ def vista_individual():
     with c3:
         st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
         if st.button("Conectar", key="ind_connect"):
-            st.session_state.ind_activa = (cam_id.strip(), token.strip())
+            st.session_state.ind_activa = (cam_id.strip().lower(), token.strip().lower())
 
     activa = st.session_state.get("ind_activa")
     if not activa or not activa[0] or not activa[1]:
@@ -220,9 +292,11 @@ def vista_individual():
     with video_col:
         st.markdown(thumb_html(f"{SERVER_URL}/video_feed/{cam}/{pin}", "Buscando señal…"),
                     unsafe_allow_html=True)
-        st.markdown(card_meta(f"Cámara {cam}", nodo["activo"], nodo["nombre"]), unsafe_allow_html=True)
+        st.markdown(card_meta(f"Cámara {cam}", nodo["activo"], nodo["zona"]), unsafe_allow_html=True)
         st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
         reproductor_audio(cam, pin)
+        st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
+        boton_hablar(cam, pin)
 
     with info_col:
         m1, m2 = st.columns(2)
@@ -230,8 +304,8 @@ def vista_individual():
         m2.metric("FPS de video", nodo["fps"])
         m1.metric("Sonido", f"{nodo['ultimo_db']} dB" if nodo["ultimo_db"] is not None else "N/D")
         m2.metric("Movimiento", f"{nodo['movimiento']} m/s²" if nodo["movimiento"] is not None else "N/D")
-        st.caption(f"Velocidad GPS: {nodo['velocidad'] or 'N/D'} km/h · Red: {nodo['red'] or 'N/D'} · "
-                   f"Última señal: {nodo['ultima_vez'] or 'N/D'}")
+        st.caption(f"Zona: {nodo['zona']} · Velocidad GPS: {nodo['velocidad'] or 'N/D'} km/h · "
+                   f"Red: {nodo['red'] or 'N/D'} · Última señal: {nodo['ultima_vez'] or 'N/D'}")
 
         st.markdown("#### Controles")
         b1, b2 = st.columns(2)
@@ -279,8 +353,8 @@ def vista_cuadricula():
         for c in range(3):
             i = fila * 3 + c
             with cols[c]:
-                cam = st.session_state[f"id_{i}"].strip()
-                pin = st.session_state[f"pin_{i}"].strip()
+                cam = st.session_state[f"id_{i}"].strip().lower()
+                pin = st.session_state[f"pin_{i}"].strip().lower()
                 nodo = por_id.get(cam)
                 conectada = st.session_state[f"conn_{i}"]
 
@@ -290,13 +364,15 @@ def vista_cuadricula():
                     st.markdown(thumb_html(None, "Sin conexión"), unsafe_allow_html=True)
 
                 titulo = f"Cámara {cam}" if cam else f"Espacio {i + 1}"
-                st.markdown(card_meta(titulo, bool(nodo and nodo["activo"] and conectada),
-                                      nodo["nombre"] if nodo else "Sin cámara asignada"),
+                sub = nodo["zona"] if nodo else "Sin cámara asignada"
+                st.markdown(card_meta(titulo, bool(nodo and nodo["activo"] and conectada), sub),
                             unsafe_allow_html=True)
 
                 with st.expander("Configurar"):
                     st.text_input("ID de la cámara", key=f"id_{i}")
                     st.text_input("PIN", type="password", key=f"pin_{i}")
+                    if cam and not nodo:
+                        st.caption("⚠️ Este ID no existe en el servidor.")
 
                 if st.button("Desconectar" if conectada else "Conectar", key=f"btn_{i}", disabled=not cam):
                     st.session_state[f"conn_{i}"] = not conectada
@@ -307,8 +383,9 @@ def vista_cuadricula():
 @st.fragment(run_every="5s")
 def vista_mapa():
     st.markdown('<h2>Mapa de nodos</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Estado, ubicación y eventos recientes de cada cámara. '
+    st.markdown('<div class="subtitle">Estado, zona y eventos recientes de cada cámara. '
                 'Se actualiza cada 5 segundos.</div>', unsafe_allow_html=True)
+    st.markdown(f"Mapa público para compartir: [{SERVER_URL}/mapa]({SERVER_URL}/mapa)")
 
     nodos = api_get("/api/estado_nodos")
     if nodos is None:
@@ -332,6 +409,7 @@ def vista_mapa():
         popup = f"""
         <div style="font-family:Roboto,Arial,sans-serif;width:240px;color:#000;font-size:15px">
           <div style="font-size:18px;font-weight:700;margin-bottom:6px">{n['id']}</div>
+          <div>Zona: <b>{n['zona']}</b></div>
           <div>Estado: <b style="color:{color_hex}">{estado_txt}</b></div>
           <div>Batería: {n['bateria']} {'⚡' if n['cargando'] else ''}</div>
           <div>Velocidad: {n['velocidad'] or 'N/D'} km/h</div>
@@ -343,7 +421,7 @@ def vista_mapa():
         folium.Marker(
             location=[n["lat"], n["lon"]],
             popup=folium.Popup(popup, max_width=280),
-            tooltip=f"{n['id']} · {estado_txt}",
+            tooltip=f"{n['id']} · {n['zona']} · {estado_txt}",
             icon=folium.Icon(color="green" if n["activo"] else "gray", icon="video-camera", prefix="fa"),
         ).add_to(mapa)
 
@@ -359,9 +437,9 @@ def vista_mapa():
     st_folium(mapa, height=540, use_container_width=True, returned_objects=[], key="mapa")
     st.caption("🟢 cámara activa · ⚫ sin conexión · 🔴 posible robo (24 h) · 🟠 pico de sonido (24 h)")
 
-    tabla = pd.DataFrame(nodos)[["id", "activo", "bateria", "velocidad", "fps", "ultimo_db", "ultima_vez"]]
+    tabla = pd.DataFrame(nodos)[["id", "zona", "activo", "bateria", "velocidad", "fps", "ultimo_db", "ultima_vez"]]
     tabla["activo"] = tabla["activo"].map({True: "EN VIVO", False: "Sin conexión"})
-    tabla.columns = ["Cámara", "Estado", "Batería", "Velocidad km/h", "FPS", "Sonido dB", "Última señal"]
+    tabla.columns = ["Cámara", "Zona", "Estado", "Batería", "Velocidad km/h", "FPS", "Sonido dB", "Última señal"]
     st.dataframe(tabla, hide_index=True, use_container_width=True)
 
 
