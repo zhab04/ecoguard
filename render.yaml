@@ -2,7 +2,7 @@ services:
   - type: web
     name: ecoguard-servidor
     runtime: python
-    plan: free               # Cambiado a free
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -k eventlet -w 1 --timeout 0 --bind 0.0.0.0:$PORT server:app
     healthCheckPath: /
@@ -12,17 +12,11 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: CAMERAS
-        sync: false          # ej. 123:PIN1,CAM-101:PIN2 (no lo subas al repositorio)
+        sync: false
       - key: NTFY_URL
-        sync: false          # opcional: https://ntfy.sh/tu-topico para notificaciones push
-      - key: DATA_DIR
-        value: /var/data
+        sync: false
       - key: TZ_NAME
         value: America/Mexico_City
-    disk:
-      name: ecoguard-datos
-      mountPath: /var/data
-      sizeGB: 5
 
   - type: web
     name: ecoguard-dashboard
@@ -34,6 +28,6 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: ECOGUARD_SERVER_URL
-        sync: false          # ej. https://ecoguard-servidor.onrender.com
+        sync: false
       - key: ECOGUARD_PIN_DEFECTO
         sync: false
