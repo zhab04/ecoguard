@@ -325,3 +325,8 @@ def generar_mjpeg(cam):
             cuadro = frames.get(cam)
             vivo = time.time() - last_seen.get(cam, 0) < ACTIVO_SEG
         if cuadro is not None and cuadro is not ultimo:
+            ultimo = cuadro
+            yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                   + str(len(cuadro)).encode() + b"\r\n\r\n" + cuadro + b"\r\n")
+        elif ultimo is not None and not vivo:
+            break  # la cámara dejó de transmitir
