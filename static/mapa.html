@@ -29,19 +29,14 @@ html, body { margin:0; height:100%; background:#000; font-family:Roboto, system-
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-// Estilos de CARTO (sin clave):
-//   dark_all   → oscuro, combina con EcoGuard
-//   light_all  → claro, más legible de día
-//   rastertiles/voyager → mapa de calles clásico con colores
-const ESTILO = "dark_all";
+// Mapa sin clave: Esri World Dark Gray (base oscura) + etiquetas de calles y colonias
+const TILES_BASE = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+const TILES_ETIQUETAS = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}";
+const ATRIBUCION = "Mapa &copy; Esri y colaboradores";
 
 const mapa = L.map("mapa").setView([19.4326, -99.1332], 5);
-
-L.tileLayer(`https://{s}.basemaps.cartocdn.com/${ESTILO}/{z}/{x}/{y}{r}.png`, {
-  subdomains: "abcd",
-  maxZoom: 20,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-}).addTo(mapa);
+L.tileLayer(TILES_BASE, { maxZoom: 16, attribution: ATRIBUCION }).addTo(mapa);
+L.tileLayer(TILES_ETIQUETAS, { maxZoom: 16 }).addTo(mapa);
 
 const capaNodos = L.layerGroup().addTo(mapa);
 const capaEventos = L.layerGroup().addTo(mapa);

@@ -13,6 +13,11 @@ st.set_page_config(page_title="EcoGuard", layout="wide", page_icon="🛡️")
 SERVER_URL = (os.environ.get("ECOGUARD_SERVER_URL") or "http://localhost:5000").rstrip("/")
 TIMEOUT = 6
 
+# Mapa sin clave: Esri World Dark Gray (base oscura) + etiquetas de calles y colonias
+TILES_BASE = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+TILES_ETIQUETAS = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+ATRIBUCION_MAPA = "Mapa &copy; Esri y colaboradores"
+
 THEME_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
@@ -398,7 +403,8 @@ def vista_mapa():
     eventos = api_get("/api/eventos", horas=24, limit=200) or []
     centro = [sum(n["lat"] for n in nodos) / len(nodos), sum(n["lon"] for n in nodos) / len(nodos)]
     mapa = folium.Map(location=centro, zoom_start=14 if len(nodos) > 1 else 16,
-                      tiles="CartoDB dark_matter")
+                      tiles=TILES_BASE, attr=ATRIBUCION_MAPA)
+    folium.TileLayer(tiles=TILES_ETIQUETAS, attr=ATRIBUCION_MAPA, name="Etiquetas").add_to(mapa)
 
     for n in nodos:
         estado_txt = "EN VIVO" if n["activo"] else "Sin conexión"
