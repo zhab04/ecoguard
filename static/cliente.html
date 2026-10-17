@@ -121,7 +121,7 @@ function cargarSocketIo() {
 }
 
 // ============================================================
-// 2. Botón Iniciar nodo (se conecta al cargar la página)
+// 2. Botón Iniciar nodo
 // ============================================================
 $("iniciar").addEventListener("click", () => {
   log("Botón pulsado");
@@ -206,33 +206,48 @@ function conectar() {
 }
 
 // ============================================================
-// 4. Barra de información sobre el video
+// 4. Overlay sobre el video
+//    Arriba izquierda: batería y hora del sistema.
+//    Franja inferior: identificación de la cámara y ubicación.
 // ============================================================
-function dibujarBarraInfo(ctx, w, h) {
-  const alto = Math.round(h * 0.13);
-  const pad = Math.round(alto * 0.18);
+function dibujarOverlay(ctx, w, h) {
+  const alto = Math.round(h * 0.09);
+  const pad = Math.round(alto * 0.22);
+  const fuente = (tam, negrita) =>
+    `${negrita ? "bold " : ""}${Math.round(tam)}px Roboto, Arial, sans-serif`;
+
+  // --- Barra superior: batería y hora, alineadas a la izquierda
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.fillRect(0, 0, w, alto);
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
 
+  const hora = new Date().toLocaleTimeString("es-MX", { hour12: false });
+  const bateria = bat != null ? `${bat}%${cargando ? " ⚡" : ""}` : "N/D";
+  ctx.fillStyle = bat != null && bat <= 20 ? "#FF5252" : "#00E676";
+  ctx.font = fuente(alto * 0.5, true);
+  ctx.fillText(`🔋 ${bateria}`, pad, alto / 2);
+
+  const anchoBateria = ctx.measureText(`🔋 ${bateria}`).width;
+  ctx.fillStyle = "#EDF7F0";
+  ctx.fillText(`   ·   ${hora}`, pad + anchoBateria, alto / 2);
+
+  // --- Franja inferior: identificación y ubicación
+  const yInf = h - alto;
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(0, yInf, w, alto);
+
   ctx.fillStyle = "#00E676";
-  ctx.font = `bold ${Math.round(alto * 0.34)}px Roboto, Arial, sans-serif`;
-  ctx.fillText(`EcoGuard · Cámara ${cam}`, pad, alto * 0.3);
+  ctx.font = fuente(alto * 0.36, true);
+  ctx.fillText(`EcoGuard · Cámara ${cam}`, pad, yInf + alto * 0.3);
 
   ctx.fillStyle = "#EDF7F0";
-  ctx.font = `${Math.round(alto * 0.26)}px Roboto, Arial, sans-serif`;
+  ctx.font = fuente(alto * 0.3);
   const pos = gps.lat != null
     ? `${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)} (±${gps.acc} m)`
     : "GPS buscando…";
-  const bateria = bat != null ? `${bat}%${cargando ? " ⚡" : ""}` : "N/D";
   const vel = gps.speed != null ? `  ·  ${gps.speed} km/h` : "";
-  ctx.fillText(`${pos}  ·  Bat ${bateria}${vel}`, pad, alto * 0.7);
-
-  ctx.textAlign = "right";
-  const hora = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City", hour12: false });
-  ctx.fillText(hora, w - pad, alto * 0.3);
-  ctx.textAlign = "left";
+  ctx.fillText(pos + vel, pad, yInf + alto * 0.72);
 }
 
 // ============================================================
@@ -247,7 +262,7 @@ async function bucleVideo() {
       captura.width = Math.round(video.videoWidth * escala);
       captura.height = Math.round(video.videoHeight * escala);
       ctx.drawImage(video, 0, 0, captura.width, captura.height);
-      dibujarBarraInfo(ctx, captura.width, captura.height);
+      dibujarOverlay(ctx, captura.width, captura.height);
       const blob = await new Promise(r => captura.toBlob(r, "image/jpeg", calidad));
       if (blob && socket.connected) {
         const buf = await blob.arrayBuffer();
