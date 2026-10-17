@@ -134,5 +134,290 @@ def ubicacion(cam):
     return LAT_DEF, LON_DEF
 
 def guardar_ubicacion(cam, lat, lon):
-    run_db(
-        "INSERT INTO nodos (cam_id, lat, lon, actualizado) VALUES (?,
+    sql = "INSERT INTO nodos (cam_id, lat, lon, actualizado) VALUES (?,?,?,?) ON CONFLICT(cam_id) DO UPDATE SET lat=excluded.lat, lon=excluded.lon, actualizado=excluded.actualizado"
+    run_db(sql, (cam, lat, lon, ahora_iso()))
+
+def enviar_push(titulo, texto):
+    try:
+        http.post(NTFY_URL, data=texto.encode("utf-8"), headers={"Title": titulo, "Priority": "urgent", "Tags": "rotating_light"}, timeout=5)
+    except Exception as e:
+        print("Error enviando notificación:", e)
+
+def registrar_evento(cam, tipo, razon, valor=None):
+    lat, lon = ubicacion(cam)
+    fecha = ahora_iso()
+    sql = "INSERT INTO eventos (cam_id, tipo, razon, valor, lat, lon, fecha) VALUES (?,?,?,?,?,?,?)"
+    eid = run_db(sql, (cam, tipo, razon, valor, lat, lon, fecha))
+    alerta = {"id": eid, "cam_id": cam, "tipo": tipo, "razon": razon, "valor": valor, "lat": lat, "lon": lon, "fecha": fecha}
+    socketio.emit("alerta", alerta)
+    if tipo == "robo" and NTFY_URL:
+        threading.Thread(target=enviar_push, args=("ALERTA EcoGuard", f"Camara {cam}: {razon}. Hora: {fecha}"), daemon=True).start()
+    return alerta
+
+def sala(cam):
+    return f"cam_{cam}"
+
+def contar_frame(cam):
+    s = fps_stats.setdefault(cam, {"n": 0, "t0": time.time(), "fps": 0})
+    s["n"] += 1
+    ahora = time.time()
+    if ahora - s["t0"] >= 1.0:
+        s["fps"] = round(s["n"] / (ahora - s["t0"]), 1)
+        s["n"], s["t0"] = 0, ahora
+
+# ---------------------------------------------------------------------------
+# Socket.IO
+# ---------------------------------------------------------------------------
+@socketio.on("registrar_camara")
+def on_registrar(data):
+    cam = str(data.get("cam_id", "")).strip()
+    token = str(data.get("token_seguridad", ""))
+    if autorizado(cam, token):
+        join_room(sala(cam))
+        socketio.emit("registro_ok", {"cam_id": cam}, to=request.sid)
+        print(f"Cámara conectada: {cam}")
+    else:
+        socketio.emit("registro_error", {"motivo": "ID o PIN incorrecto"}, to=request.sid)
+
+@socketio.on("video_frame")
+def on_frame(data):
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")):
+        return {"ok": False}
+    cuadro = data.get("frame")
+    if isinstance(cuadro, (bytes, bytearray)):
+        with condicion:
+            frames[cam] = bytes(cuadro)
+            last_seen[cam] = time.time()
+            condicion.notify_all()
+        contar_frame(cam)
+    return {"ok": True}
+
+@socketio.on("audio_chunk")
+def on_audio(data):
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")):
+        return
+    chunk = data.get("chunk")
+    if not isinstance(chunk, (bytes, bytearray)):
+        return
+    with condicion:
+        prev = audio_estado.get(cam, {})
+        seq = prev.get("seq", 0) + 1
+        if data.get("header") or not prev:
+            audio_estado[cam] = {"header": bytes(chunk), "seq": seq, "chunks": collections.deque(maxlen=60), "ts": time.time()}
+        else:
+            prev["seq"] = seq
+            prev["chunks"].append((seq, bytes(chunk)))
+            prev["ts"] = time.time()
+        condicion.notify_all()
+
+@socketio.on("recording_segment")
+def on_segmento(data):
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")):
+        return {"ok": False, "error": "No autorizado"}
+    video = data.get("video")
+    if not isinstance(video, (bytes, bytearray)):
+        return {"ok": False, "error": "Datos inválidos"}
+    carpeta = os.path.join(REC_DIR, cam)
+    os.makedirs(carpeta, exist_ok=True)
+    nombre = f"{cam}_{int(time.time())}.webm"
+    ruta = os.path.join(carpeta, nombre)
+    with open(ruta, "wb") as f:
+        f.write(video)
+    sql = "INSERT INTO grabaciones (cam_id, archivo, inicio, duracion, bytes) VALUES (?,?,?,?,?)"
+    run_db(sql, (cam, f"{cam}/{nombre}", data.get("inicio"), float(data.get("duracion") or 0), len(video)))
+    podar_grabaciones(cam)
+    return {"ok": True}
+
+def podar_grabaciones(cam):
+    sql = "SELECT id, archivo FROM grabaciones WHERE cam_id=? ORDER BY id DESC LIMIT -1 OFFSET ?"
+    viejas = run_db(sql, (cam, MAX_GRABACIONES), True)
+    for g in viejas:
+        try:
+            os.remove(os.path.join(REC_DIR, g["archivo"]))
+        except OSError:
+            pass
+        run_db("DELETE FROM grabaciones WHERE id=?", (g["id"],))
+
+@socketio.on("telemetria")
+def on_telemetria(data):
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")):
+        return
+    previo = telemetry.get(cam, {})
+    nuevo = {**previo, **{k: data.get(k) for k in ("lat", "lon", "precision", "velocidad", "rumbo", "bat", "cargando", "orient", "movimiento", "luz", "red", "audio_db", "grabando", "fps", "calidad")}}
+    telemetry[cam] = nuevo
+    if nuevo.get("lat") is not None and nuevo.get("lon") is not None:
+        guardar_ubicacion(cam, nuevo["lat"], nuevo["lon"])
+
+@socketio.on("evento_sonido")
+def on_sonido(data):
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")) or not puede_registrar(cam, "sonido", 8):
+        return
+    db = float(data.get("db", 0))
+    base = data.get("linea_base")
+    razon = f"Pico elevado de sonido ({db:.0f} dB"
+    razon += f", base {base:.0f} dB)" if base is not None else ")"
+    registrar_evento(cam, "sonido", razon, db)
+
+@socketio.on("evento_movimiento")
+def on_movimiento(data):
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")) or not puede_registrar(cam, "robo", 15):
+        return
+    mag = float(data.get("magnitud", 0))
+    registrar_evento(cam, "robo", f"Movimiento brusco del teléfono ({mag:.1f} m/s²): posible intento de robo", mag)
+
+# ---------------------------------------------------------------------------
+# Streams HTTP
+# ---------------------------------------------------------------------------
+def generar_mjpeg(cam):
+    ultimo = None
+    while True:
+        with condicion:
+            condicion.wait(1.0)
+            cuadro = frames.get(cam)
+            vivo = time.time() - last_seen.get(cam, 0) < ACTIVO_SEG
+        if cuadro is not None and cuadro is not ultimo:
+            ultimo = cuadro
+            yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(cuadro)).encode() + b"\r\n\r\n" + cuadro + b"\r\n"
+        elif ultimo is not None and not vivo:
+            break
+
+def generar_audio(cam):
+    with condicion:
+        while not audio_estado.get(cam, {}).get("header"):
+            condicion.wait(1.0)
+        st = audio_estado[cam]
+        ultimo = st["seq"]
+        cabecera = st["header"]
+    yield cabecera
+    while True:
+        with condicion:
+            condicion.wait(1.0)
+            st = audio_estado.get(cam)
+            if not st or time.time() - st["ts"] > 10:
+                break
+            pendientes = [c for s, c in st["chunks"] if s > ultimo]
+            if pendientes:
+                ultimo = st["seq"]
+        for c in pendientes:
+            yield c
+
+@app.route("/video_feed/<cam_id>/<token>")
+def video_feed(cam_id, token):
+    if not autorizado(cam_id, token):
+        return "Acceso denegado", 403
+    return Response(generar_mjpeg(cam_id), mimetype="multipart/x-mixed-replace; boundary=frame", headers={"Cache-Control": "no-cache"})
+
+@app.route("/audio_feed/<cam_id>/<token>")
+def audio_feed(cam_id, token):
+    if not autorizado(cam_id, token):
+        return "Acceso denegado", 403
+    return Response(generar_audio(cam_id), mimetype="audio/webm", headers={"Cache-Control": "no-cache"})
+
+# ---------------------------------------------------------------------------
+# Rutas WEB y API
+# ---------------------------------------------------------------------------
+@app.route("/")
+def index():
+    if os.path.exists(os.path.join(STATIC_DIR, "cliente.html")):
+        return send_from_directory(STATIC_DIR, "cliente.html")
+    return jsonify(servicio="EcoGuard", estado="en línea", camaras=list(CAMERAS.keys()))
+
+@app.route("/cliente")
+def cliente():
+    return send_from_directory(STATIC_DIR, "cliente.html")
+
+@app.route("/api/estado_nodos")
+def api_estado_nodos():
+    ts = time.time()
+    nodos = []
+    for cam in CAMERAS:
+        t = telemetry.get(cam, {})
+        lat, lon = ubicacion(cam)
+        visto = last_seen.get(cam)
+        nodos.append({
+            "id": cam,
+            "nombre": f"Nodo {cam}",
+            "lat": lat,
+            "lon": lon,
+            "precision_m": t.get("precision"),
+            "activo": bool(visto and ts - visto < ACTIVO_SEG),
+            "bateria": f"{t['bat']}%" if t.get("bat") is not None else "N/D",
+            "cargando": t.get("cargando", False),
+            "velocidad": t.get("velocidad"),
+            "rumbo": t.get("rumbo"),
+            "movimiento": t.get("movimiento"),
+            "orientacion": t.get("orient"),
+            "luz": t.get("luz"),
+            "red": t.get("red"),
+            "ultimo_db": t.get("audio_db"),
+            "grabando": t.get("grabando", False),
+            "fps": fps_stats.get(cam, {}).get("fps", 0),
+            "calidad": t.get("calidad"),
+            "ultima_vez": (datetime.fromtimestamp(visto, ZONA).isoformat(timespec="seconds") if visto else None),
+        })
+    return jsonify(nodos)
+
+@app.route("/api/eventos")
+def api_eventos():
+    cam = request.args.get("cam_id")
+    horas = float(request.args.get("horas", 0) or 0)
+    limite = min(int(request.args.get("limit", 100)), 500)
+    condiciones, params = [], []
+    if cam:
+        condiciones.append("cam_id=?"); params.append(cam)
+    if horas:
+        desde = datetime.now(ZONA) - timedelta(hours=horas)
+        condiciones.append("fecha>=?"); params.append(desde.isoformat(timespec="seconds"))
+    where = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    sql = f"SELECT * FROM eventos {where} ORDER BY id DESC LIMIT ?"
+    filas = run_db(sql, (*params, limite), True)
+    return jsonify(filas)
+
+@app.route("/api/estadisticas")
+def api_estadisticas():
+    cam = request.args.get("cam_id")
+    where, params = ("WHERE cam_id=?", (cam,)) if cam else ("", ())
+    sql_hora = f"SELECT substr(fecha,12,2) AS hora, COUNT(*) AS total FROM eventos {where} GROUP BY hora ORDER BY hora"
+    por_hora = run_db(sql_hora, params, True)
+    sql_tipo = f"SELECT tipo, COUNT(*) AS total FROM eventos {where} GROUP BY tipo"
+    por_tipo = run_db(sql_tipo, params, True)
+    return jsonify(por_hora=[[f["hora"], f["total"]] for f in por_hora], por_tipo=por_tipo)
+
+@app.route("/api/grabaciones")
+def api_grabaciones():
+    cam = request.args.get("cam_id", "")
+    sql = "SELECT id, cam_id, inicio, duracion, bytes FROM grabaciones WHERE cam_id=? ORDER BY id DESC LIMIT 50"
+    filas = run_db(sql, (cam,), True)
+    for f in filas:
+        f["ruta"] = f"/grabaciones/{f['id']}"
+    return jsonify(filas)
+
+@app.route("/grabaciones/<int:rid>/<token>")
+def ver_grabacion(rid, token):
+    fila = run_db("SELECT cam_id, archivo FROM grabaciones WHERE id=?", (rid,), True)
+    if not fila or not autorizado(fila[0]["cam_id"], token):
+        abort(403)
+    return send_file(os.path.join(REC_DIR, fila[0]["archivo"]), mimetype="video/webm", conditional=True)
+
+ACCIONES = {"start_recording", "stop_recording", "mute_audio", "unmute_audio", "calidad_alta", "calidad_baja"}
+
+@app.route("/api/comando", methods=["POST"])
+def api_comando():
+    datos = request.get_json(silent=True) or {}
+    cam, pin = str(datos.get("cam_id", "")), str(datos.get("pin", ""))
+    if not autorizado(cam, pin):
+        return jsonify(error="ID o PIN incorrecto"), 403
+    accion = datos.get("accion")
+    if accion not in ACCIONES:
+        return jsonify(error="Acción no válida"), 400
+    socketio.emit("comando", {"accion": accion}, to=sala(cam))
+    return jsonify(ok=True)
+
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
