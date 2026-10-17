@@ -56,7 +56,7 @@ def css_tema(p):
     return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-:root {{ {variables} --radio: {RADIO}; }}
+:root {{ {variables} --radio: {RADIO}; --gap: clamp(8px, 1.2vw, 14px); }}
 html, body, [class*="css"], .stApp, p, label, input, button, textarea {{
   font-family: 'Roboto', system-ui, sans-serif !important;
 }}
@@ -69,14 +69,28 @@ html, body, [class*="css"], .stApp, p, label, input, button, textarea {{
 }}
 .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{ color: var(--text); }}
 header[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display: none !important; }}
-.block-container {{ padding-top: 1rem; padding-bottom: 6rem; max-width: 1150px; }}
-[data-testid="stHorizontalBlock"] {{ gap: .75rem !important; align-items: stretch; }}
-[data-testid="stVerticalBlock"] {{ gap: .75rem; }}
-h2 {{ font-size: 1.9rem !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: -.3px; }}
+
+/* Contenedor principal fluido: ocupa el ancho disponible con márgenes proporcionales */
+.block-container {{
+  padding: clamp(.6rem, 2vw, 1.4rem) clamp(.7rem, 3vw, 2rem) 6rem !important;
+  max-width: 1200px !important; margin: 0 auto;
+}}
+
+/* Columnas fluidas: se acomodan en fila si hay espacio y se apilan si no */
+[data-testid="stHorizontalBlock"] {{
+  flex-wrap: wrap !important; gap: var(--gap) !important; align-items: stretch;
+}}
+[data-testid="stHorizontalBlock"] > [data-testid="column"],
+[data-testid="stHorizontalBlock"] > div {{
+  flex: 1 1 280px !important; min-width: min(100%, 280px) !important; width: auto !important;
+}}
+[data-testid="stVerticalBlock"] {{ gap: var(--gap); }}
+
+h2 {{ font-size: clamp(1.4rem, 3.4vw, 1.9rem) !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: -.3px; }}
 
 /* Encabezado */
-.logo {{ display: flex; align-items: center; gap: 10px; font-size: 1.5rem; font-weight: 700; color: var(--text); }}
-.subtitle {{ color: var(--muted); font-size: 1rem; margin: 4px 0 12px; }}
+.logo {{ display: flex; align-items: center; gap: 10px; font-size: clamp(1.2rem, 3vw, 1.5rem); font-weight: 700; color: var(--text); }}
+.subtitle {{ color: var(--muted); font-size: clamp(.9rem, 2.2vw, 1rem); margin: 4px 0 10px; }}
 
 /* Tarjetas: bordes alineados, fondo translúcido con desenfoque */
 [data-testid="stVerticalBlockBorderWrapper"] {{
@@ -89,33 +103,35 @@ h2 {{ font-size: 1.9rem !important; font-weight: 700 !important; margin: 0 !impo
   animation: fadeUp .45s ease both;
   padding: 0 !important;
   overflow: hidden;
+  min-width: 0;
 }}
-[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 14px 16px !important; }}
+[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: clamp(10px, 2vw, 16px) !important; }}
 [data-testid="stVerticalBlockBorderWrapper"] > div > div {{ gap: .6rem; }}
 @keyframes fadeUp {{ from {{ opacity: 0; transform: translateY(12px); }} to {{ opacity: 1; transform: none; }} }}
 @keyframes pulso {{ 0%, 100% {{ opacity: 1; transform: scale(1); }} 50% {{ opacity: .3; transform: scale(.6); }} }}
 
-/* Navegación superior en pastillas translúcidas */
+/* Navegación superior en pastillas translúcidas (se ajusta en varias líneas) */
 div[role="radiogroup"] {{
   display: flex; flex-wrap: wrap; gap: 6px; background: var(--glass);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-  border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin-bottom: 10px;
 }}
 div[role="radiogroup"] label {{
-  border-radius: 999px !important; padding: 8px 14px !important; margin: 0 !important;
-  transition: background .25s ease, transform .15s ease; cursor: pointer;
+  border-radius: 999px !important; padding: 7px 12px !important; margin: 0 !important;
+  transition: background .25s ease, transform .15s ease; cursor: pointer; flex: 0 1 auto;
 }}
 div[role="radiogroup"] label:hover {{ background: var(--glass2); }}
 div[role="radiogroup"] label:active {{ transform: scale(.96); }}
 div[role="radiogroup"] label > div:first-child {{ display: none !important; }}
-div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: .95rem !important; color: var(--muted) !important; }}
+div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: clamp(.8rem, 2.2vw, .95rem) !important; color: var(--muted) !important; white-space: nowrap; }}
 div[role="radiogroup"] label:has(input:checked) {{ background: var(--accent); }}
 div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 
 /* Botones */
 .stButton > button {{
   background: var(--accent); color: #000; border: 0; border-radius: 999px; font-weight: 700;
-  width: 100%; padding: .55rem 1rem; transition: transform .15s ease, filter .2s ease;
+  width: 100%; padding: .55rem .8rem; font-size: clamp(.85rem, 2.2vw, 1rem);
+  transition: transform .15s ease, filter .2s ease; white-space: normal; line-height: 1.2;
 }}
 .stButton > button:hover {{ filter: brightness(1.08); color: #000; }}
 .stButton > button:active {{ transform: scale(.97); }}
@@ -124,41 +140,42 @@ div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 /* Campos y sliders */
 .stTextInput input {{
   background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
-  color: var(--text) !important; padding: .65rem .9rem !important; font-size: 1.02rem !important;
+  color: var(--text) !important; padding: .6rem .85rem !important; font-size: 1rem !important;
 }}
 .stTextInput input:focus {{ border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(0,230,118,.18) !important; }}
-[data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; }}
+[data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; font-size: .9rem !important; }}
 [data-testid="stSlider"] [role="slider"] {{ background: var(--accent) !important; box-shadow: 0 0 0 4px rgba(0,230,118,.18); }}
 [data-testid="stSlider"] div[data-baseweb="slider"] > div > div:nth-child(2) {{ background: var(--accent) !important; }}
 [data-testid="stSelectbox"] div[data-baseweb="select"] > div {{
   background: var(--glass2) !important; border-color: var(--line) !important; border-radius: 14px !important;
 }}
-[data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; }}
+[data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; white-space: nowrap; }}
 
 /* Expansor y captions */
 [data-testid="stExpander"] {{
   background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
 }}
 [data-testid="stExpander"] summary p {{ color: var(--muted) !important; }}
-[data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; }}
+[data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; font-size: .85rem !important; }}
 hr {{ border-color: var(--line) !important; }}
-[data-testid="stDataFrame"] {{ border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }}
-[data-testid="stVideo"] video {{ border-radius: 14px; }}
+[data-testid="stDataFrame"] {{ border-radius: 14px; overflow: hidden; border: 1px solid var(--line); max-width: 100%; }}
+[data-testid="stVideo"] video {{ border-radius: 14px; width: 100%; }}
+[data-testid="stIFrame"], iframe {{ max-width: 100%; }}
 
 /* Etiquetas de estado */
 .live {{
   display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #000;
-  font-weight: 700; font-size: .78rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
+  font-weight: 700; font-size: .76rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
 }}
 .live::before {{ content: ""; width: 7px; height: 7px; border-radius: 50%; background: #000; animation: pulso 1.3s infinite; }}
 .off {{
   display: inline-flex; align-items: center; background: var(--glass3); color: var(--muted);
-  border: 1px solid var(--line); font-weight: 600; font-size: .78rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
+  border: 1px solid var(--line); font-weight: 600; font-size: .76rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
 }}
-.titulo-cam {{ font-size: 1.15rem; font-weight: 700; margin-top: 10px; color: var(--text); }}
-.zona {{ color: var(--muted); font-size: .92rem; margin-top: 2px; }}
+.titulo-cam {{ font-size: clamp(1rem, 2.6vw, 1.15rem); font-weight: 700; margin-top: 8px; color: var(--text); overflow-wrap: anywhere; }}
+.zona {{ color: var(--muted); font-size: clamp(.82rem, 2vw, .92rem); margin-top: 2px; overflow-wrap: anywhere; }}
 
-/* Video: la miniatura ocupa el mismo ancho que el marco y usa el mismo radio */
+/* Video: proporción fija 16:9 que se adapta al ancho de su columna */
 .thumb {{
   position: relative; width: 100%; aspect-ratio: 16 / 9; background: rgba(5,8,5,.55);
   border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
@@ -166,45 +183,54 @@ hr {{ border-color: var(--line) !important; }}
 .thumb img {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }}
 .thumb .sin {{
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 8px; color: #8FA397; font-size: 1.02rem;
+  justify-content: center; gap: 6px; color: #8FA397; font-size: clamp(.85rem, 2.4vw, 1.02rem); text-align: center; padding: 8px;
 }}
 
-/* Indicadores */
-.kpis {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 4px 0 10px; }}
+/* Indicadores: se acomodan según el ancho */
+.kpis {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin: 4px 0 8px; }}
 .kpi {{
-  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px;
+  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 9px 11px; min-width: 0;
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   transition: transform .2s ease, background .2s ease;
 }}
 .kpi:hover {{ transform: translateY(-2px); background: var(--glass); }}
-.kpi small {{ display: block; color: var(--muted); font-size: .76rem; }}
-.kpi b {{ display: block; color: var(--accent); font-size: 1.3rem; margin-top: 2px; }}
+.kpi small {{ display: block; color: var(--muted); font-size: clamp(.7rem, 1.9vw, .76rem); }}
+.kpi b {{ display: block; color: var(--accent); font-size: clamp(1.05rem, 3vw, 1.3rem); margin-top: 2px; overflow-wrap: anywhere; }}
 
 /* Leyenda */
-.leyenda {{ display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: .85rem; margin: 6px 0; }}
+.leyenda {{ display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--muted); font-size: .85rem; margin: 6px 0; }}
 .leyenda i {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }}
 
 /* Lista animada */
 .al {{ display: flex; flex-direction: column; gap: 6px; }}
 .al-item {{
-  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px;
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   opacity: 0; transform: translateX(-18px); animation: entra .4s ease forwards;
   animation-delay: calc(var(--i) * 60ms); transition: background .2s ease, transform .2s ease;
 }}
 .al-item:hover {{ background: var(--sel); transform: translateX(3px); }}
 @keyframes entra {{ to {{ opacity: 1; transform: none; }} }}
-.al-titulo {{ font-weight: 600; color: var(--text); }}
-.al-desc {{ color: var(--muted); font-size: .88rem; margin-top: 2px; }}
-.al-meta {{ color: var(--muted); font-size: .8rem; white-space: nowrap; }}
+.al-item > div:first-child {{ min-width: 0; }}
+.al-titulo {{ font-weight: 600; color: var(--text); overflow-wrap: anywhere; }}
+.al-desc {{ color: var(--muted); font-size: .86rem; margin-top: 2px; overflow-wrap: anywhere; }}
+.al-meta {{ color: var(--muted); font-size: .78rem; white-space: nowrap; flex-shrink: 0; }}
 .vacio {{
-  text-align: center; color: var(--muted); padding: 26px 10px; border: 1px dashed var(--line);
+  text-align: center; color: var(--muted); padding: 24px 10px; border: 1px dashed var(--line);
   border-radius: 14px; background: var(--glass3);
 }}
 .aviso {{
-  background: var(--glass3); border: 1px dashed var(--line); border-radius: 14px; padding: 20px;
+  background: var(--glass3); border: 1px dashed var(--line); border-radius: 14px; padding: 18px;
   text-align: center; color: var(--muted);
+}}
+
+/* Teléfonos: márgenes y tipografía más compactos */
+@media (max-width: 640px) {{
+  .block-container {{ padding-left: .6rem !important; padding-right: .6rem !important; }}
+  [data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 10px !important; }}
+  .stButton > button {{ padding: .5rem .6rem; }}
+  .kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
 }}
 
 @media (prefers-reduced-motion: reduce) {{
@@ -243,7 +269,7 @@ def esc(texto):
 
 def thumb_html(url=None, texto="Sin señal"):
     img = f'<img src="{url}" onerror="this.style.display=\'none\'" />' if url else ""
-    return (f'<div class="thumb"><div class="sin"><div style="font-size:2.2rem">📡</div>'
+    return (f'<div class="thumb"><div class="sin"><div style="font-size:2rem">📡</div>'
             f'<div>{texto}</div></div>{img}</div>')
 
 
@@ -273,18 +299,21 @@ def hora_de(fecha):
 
 
 # ---------------------------------------------------------------------------
-# Plantillas de componentes HTML (audio y hablar), con colores del tema
+# Plantillas de componentes HTML (audio y hablar), con colores del tema.
+# Son responsivas: los controles se acomodan en varias líneas si no caben.
 # ---------------------------------------------------------------------------
 PLANTILLA_AUDIO = """
 <div style="font-family:Roboto,sans-serif;color:__TEXT__;background:__GLASS__;border:1px solid __LINE__;
-            border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-            backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box">
+            border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;
+            backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box;width:100%">
   <audio id="a" src="__URL__" autoplay></audio>
   <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:8px 14px;
-          font-weight:700;cursor:pointer">🔇 Silenciar</button>
-  <span style="color:__MUTED__;font-size:13px">🔊</span>
-  <input id="v" type="range" min="0" max="100" value="100" style="flex:1;min-width:120px;accent-color:__ACCENT__">
-  <span id="vt" style="color:__MUTED__;font-size:13px;min-width:38px;text-align:right">100%</span>
+          font-weight:700;cursor:pointer;white-space:nowrap">🔇 Silenciar</button>
+  <div style="display:flex;align-items:center;gap:8px;flex:1 1 160px;min-width:0">
+    <span style="color:__MUTED__;font-size:13px">🔊</span>
+    <input id="v" type="range" min="0" max="100" value="100" style="flex:1;min-width:0;accent-color:__ACCENT__">
+    <span id="vt" style="color:__MUTED__;font-size:13px;min-width:38px;text-align:right">100%</span>
+  </div>
 </div>
 <script>
 const a = document.getElementById('a'), b = document.getElementById('b');
@@ -298,11 +327,12 @@ a.play().catch(() => {});
 
 PLANTILLA_HABLAR = """
 <div style="font-family:Roboto,sans-serif;background:__GLASS__;border:1px solid __LINE__;
-            border-radius:14px;padding:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box">
+            border-radius:14px;padding:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+            box-sizing:border-box;width:100%">
   <button id="h" style="width:100%;background:__ACCENT__;color:#000;border:0;border-radius:999px;
           padding:11px;font-weight:700;font-size:15px;cursor:pointer;user-select:none;touch-action:none">
     🎙️ Mantén presionado para hablar</button>
-  <div id="s" style="color:__MUTED__;font-size:13px;margin-top:6px">Micrófono apagado</div>
+  <div id="s" style="color:__MUTED__;font-size:13px;margin-top:6px;line-height:1.3">Micrófono apagado</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script>
@@ -377,7 +407,8 @@ def reproductor_audio(cam, pin):
         **colores_iframe(paleta_actual()),
         "__URL__": f"{SERVER_URL}/audio_feed/{cam}/{pin}",
     })
-    components.html(html_audio, height=80)
+    # Altura generosa: en pantallas chicas los controles ocupan dos líneas
+    components.html(html_audio, height=104)
 
 
 def boton_hablar(cam, pin):
@@ -387,7 +418,7 @@ def boton_hablar(cam, pin):
         "__CAM__": json.dumps(cam),
         "__PIN__": json.dumps(pin),
     })
-    components.html(html_hablar, height=104)
+    components.html(html_hablar, height=120)
 
 
 def accion(cam, pin, accion_id, texto):
@@ -627,8 +658,8 @@ def vista_mapa():
             folium.Circle(location=[n["lat"], n["lon"]], radius=n["precision_m"],
                           color=color_hex, fill=True, fill_opacity=0.08, weight=1).add_to(mapa)
         popup = f"""
-        <div style="font-family:Roboto,Arial,sans-serif;width:240px;color:#000;font-size:15px">
-          <div style="font-size:18px;font-weight:700;margin-bottom:6px">{esc(n['id'])}</div>
+        <div style="font-family:Roboto,Arial,sans-serif;width:220px;color:#000;font-size:14px">
+          <div style="font-size:17px;font-weight:700;margin-bottom:6px">{esc(n['id'])}</div>
           <div>Zona: <b>{esc(n['zona'])}</b></div>
           <div>Estado: <b style="color:{color_hex}">{estado_txt}</b></div>
           <div>Batería: {esc(n['bateria'])} {'⚡' if n['cargando'] else ''}</div>
@@ -640,7 +671,7 @@ def vista_mapa():
         </div>"""
         folium.Marker(
             location=[n["lat"], n["lon"]],
-            popup=folium.Popup(popup, max_width=280),
+            popup=folium.Popup(popup, max_width=260),
             tooltip=f"{n['id']} · {n['zona']} · {estado_txt}",
             icon=folium.Icon(color="green" if n["activo"] else "gray", icon="video-camera", prefix="fa"),
         ).add_to(mapa)
@@ -654,7 +685,8 @@ def vista_mapa():
             tooltip=f"{hora_de(e['fecha'])} · Cámara {e['cam_id']} · {e['razon']}",
         ).add_to(mapa)
 
-    salida = st_folium(mapa, height=520, use_container_width=True,
+    # Altura moderada: se ve completo tanto en teléfono como en computadora
+    salida = st_folium(mapa, height=440, use_container_width=True,
                        returned_objects=["center", "zoom"], key="mapa")
     if salida and salida.get("center") and salida.get("zoom"):
         st.session_state.mapa_vista = {
@@ -750,7 +782,7 @@ st.session_state.setdefault("claro", False)
 st.markdown(css_tema(paleta_actual()), unsafe_allow_html=True)
 alertas_en_vivo()
 
-col_logo, col_tema = st.columns([3, 2])
+col_logo, col_tema = st.columns([3, 2], vertical_alignment="center")
 with col_logo:
     st.markdown(f'<div class="logo">{LOGO_SVG}<span>EcoGuard</span></div>', unsafe_allow_html=True)
 with col_tema:
