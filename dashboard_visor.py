@@ -14,7 +14,7 @@ st.set_page_config(page_title="EcoGuard", layout="wide", page_icon="🛡️",
 
 SERVER_URL = (os.environ.get("ECOGUARD_SERVER_URL") or "http://localhost:5000").rstrip("/")
 TIMEOUT = 6
-RADIO = "18px"
+RADIO = "16px"
 
 PALETA_OSCURA = {
     "bg": "#000000", "bg2": "#0B100C", "bg3": "#141C16", "line": "#1F2B22",
@@ -41,7 +41,7 @@ MAPA_CLARO = (
 ATRIBUCION_MAPA = "Mapa &copy; Esri y colaboradores"
 
 LOGO_SVG = """
-<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="1.8" aria-hidden="true">
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00E676" stroke-width="1.8" aria-hidden="true">
   <path d="M12 2.5 L19.5 5.5 V11 C19.5 15.8 16.4 19.8 12 21.5 C7.6 19.8 4.5 15.8 4.5 11 V5.5 Z"/>
   <circle cx="12" cy="11" r="3.6"/><circle cx="12" cy="11" r="1.2" fill="#00E676" stroke="none"/>
 </svg>"""
@@ -56,9 +56,16 @@ def css_tema(p):
     return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
-:root {{ {variables} --radio: {RADIO}; --gap: clamp(8px, 1.2vw, 14px); }}
+:root {{ {variables} --radio: {RADIO}; --gap: 10px; }}
+
+/* Sin desplazamiento horizontal en ninguna pantalla */
+html, body {{ overflow-x: hidden !important; max-width: 100vw; }}
+[data-testid="stAppViewContainer"], [data-testid="stMain"], .stApp {{
+  overflow-x: hidden !important; max-width: 100vw;
+}}
 html, body, [class*="css"], .stApp, p, label, input, button, textarea {{
   font-family: 'Roboto', system-ui, sans-serif !important;
+  box-sizing: border-box;
 }}
 .stApp {{
   background:
@@ -70,67 +77,72 @@ html, body, [class*="css"], .stApp, p, label, input, button, textarea {{
 .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4 {{ color: var(--text); }}
 header[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display: none !important; }}
 
-/* Contenedor principal fluido: ocupa el ancho disponible con márgenes proporcionales */
 .block-container {{
-  padding: clamp(.6rem, 2vw, 1.4rem) clamp(.7rem, 3vw, 2rem) 6rem !important;
-  max-width: 1200px !important; margin: 0 auto;
+  padding: 14px clamp(10px, 3vw, 28px) 96px !important;
+  max-width: 1200px !important; width: 100%; margin: 0 auto;
 }}
 
-/* Columnas fluidas: se acomodan en fila si hay espacio y se apilan si no */
+/* Columnas: en computadora lado a lado; en teléfono, una debajo de otra */
 [data-testid="stHorizontalBlock"] {{
-  flex-wrap: wrap !important; gap: var(--gap) !important; align-items: stretch;
+  flex-wrap: wrap !important; gap: var(--gap) !important; align-items: stretch; width: 100%;
 }}
-[data-testid="stHorizontalBlock"] > [data-testid="column"],
-[data-testid="stHorizontalBlock"] > div {{
-  flex: 1 1 280px !important; min-width: min(100%, 280px) !important; width: auto !important;
+[data-testid="stHorizontalBlock"] > [data-testid="column"] {{
+  flex: 1 1 260px !important; min-width: 0 !important; max-width: 100% !important; width: auto !important;
 }}
-[data-testid="stVerticalBlock"] {{ gap: var(--gap); }}
+[data-testid="stVerticalBlock"] {{ gap: var(--gap); min-width: 0; }}
+[data-testid="stVerticalBlockBorderWrapper"], .stMarkdown, .element-container, iframe {{ max-width: 100%; }}
 
-h2 {{ font-size: clamp(1.4rem, 3.4vw, 1.9rem) !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: -.3px; }}
+h2 {{ font-size: clamp(1.3rem, 5vw, 1.8rem) !important; font-weight: 700 !important; margin: 0 !important; letter-spacing: -.3px; }}
 
 /* Encabezado */
-.logo {{ display: flex; align-items: center; gap: 10px; font-size: clamp(1.2rem, 3vw, 1.5rem); font-weight: 700; color: var(--text); }}
-.subtitle {{ color: var(--muted); font-size: clamp(.9rem, 2.2vw, 1rem); margin: 4px 0 10px; }}
+.logo {{ display: flex; align-items: center; gap: 8px; font-size: 1.3rem; font-weight: 700; color: var(--text); }}
+.subtitle {{ color: var(--muted); font-size: .92rem; margin: 2px 0 8px; line-height: 1.35; }}
 
-/* Tarjetas: bordes alineados, fondo translúcido con desenfoque */
+/* Tarjetas: un solo marco, sin duplicados */
 [data-testid="stVerticalBlockBorderWrapper"] {{
   background: var(--glass) !important;
   -webkit-backdrop-filter: blur(14px) saturate(120%);
   backdrop-filter: blur(14px) saturate(120%);
   border: 1px solid var(--line) !important;
   border-radius: var(--radio) !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
   animation: fadeUp .45s ease both;
   padding: 0 !important;
   overflow: hidden;
-  min-width: 0;
+  width: 100%;
 }}
-[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: clamp(10px, 2vw, 16px) !important; }}
-[data-testid="stVerticalBlockBorderWrapper"] > div > div {{ gap: .6rem; }}
-@keyframes fadeUp {{ from {{ opacity: 0; transform: translateY(12px); }} to {{ opacity: 1; transform: none; }} }}
+[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 12px !important; }}
+[data-testid="stVerticalBlockBorderWrapper"] > div > div {{ gap: .5rem; }}
+/* Quita marcos anidados (evita el doble borde) */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] {{
+  background: transparent !important; border: 0 !important; box-shadow: none !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important; padding: 0 !important; animation: none !important;
+}}
+@keyframes fadeUp {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: none; }} }}
 @keyframes pulso {{ 0%, 100% {{ opacity: 1; transform: scale(1); }} 50% {{ opacity: .3; transform: scale(.6); }} }}
 
-/* Navegación superior en pastillas translúcidas (se ajusta en varias líneas) */
+/* Navegación en pastillas: se acomoda en varias líneas */
 div[role="radiogroup"] {{
-  display: flex; flex-wrap: wrap; gap: 6px; background: var(--glass);
+  display: flex; flex-wrap: wrap; gap: 4px; background: var(--glass);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-  border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin-bottom: 10px;
+  border: 1px solid var(--line); border-radius: 22px; padding: 4px; margin-bottom: 8px; width: 100%;
 }}
 div[role="radiogroup"] label {{
-  border-radius: 999px !important; padding: 7px 12px !important; margin: 0 !important;
-  transition: background .25s ease, transform .15s ease; cursor: pointer; flex: 0 1 auto;
+  border-radius: 999px !important; padding: 6px 11px !important; margin: 0 !important;
+  transition: background .25s ease, transform .15s ease; cursor: pointer;
 }}
 div[role="radiogroup"] label:hover {{ background: var(--glass2); }}
 div[role="radiogroup"] label:active {{ transform: scale(.96); }}
 div[role="radiogroup"] label > div:first-child {{ display: none !important; }}
-div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: clamp(.8rem, 2.2vw, .95rem) !important; color: var(--muted) !important; white-space: nowrap; }}
+div[role="radiogroup"] label p {{ font-weight: 600 !important; font-size: .88rem !important; color: var(--muted) !important; white-space: nowrap; }}
 div[role="radiogroup"] label:has(input:checked) {{ background: var(--accent); }}
 div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 
 /* Botones */
 .stButton > button {{
   background: var(--accent); color: #000; border: 0; border-radius: 999px; font-weight: 700;
-  width: 100%; padding: .55rem .8rem; font-size: clamp(.85rem, 2.2vw, 1rem);
+  width: 100%; padding: .5rem .7rem; font-size: .92rem;
   transition: transform .15s ease, filter .2s ease; white-space: normal; line-height: 1.2;
 }}
 .stButton > button:hover {{ filter: brightness(1.08); color: #000; }}
@@ -139,98 +151,102 @@ div[role="radiogroup"] label:has(input:checked) p {{ color: #000 !important; }}
 
 /* Campos y sliders */
 .stTextInput input {{
-  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
-  color: var(--text) !important; padding: .6rem .85rem !important; font-size: 1rem !important;
+  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 12px !important;
+  color: var(--text) !important; padding: .55rem .8rem !important; font-size: .98rem !important;
 }}
 .stTextInput input:focus {{ border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(0,230,118,.18) !important; }}
-[data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; font-size: .9rem !important; }}
+[data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; font-size: .88rem !important; }}
 [data-testid="stSlider"] [role="slider"] {{ background: var(--accent) !important; box-shadow: 0 0 0 4px rgba(0,230,118,.18); }}
 [data-testid="stSlider"] div[data-baseweb="slider"] > div > div:nth-child(2) {{ background: var(--accent) !important; }}
 [data-testid="stSelectbox"] div[data-baseweb="select"] > div {{
-  background: var(--glass2) !important; border-color: var(--line) !important; border-radius: 14px !important;
+  background: var(--glass2) !important; border-color: var(--line) !important; border-radius: 12px !important;
 }}
-[data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; white-space: nowrap; }}
+[data-testid="stToggle"] label p {{ color: var(--text) !important; font-weight: 600; white-space: nowrap; font-size: .9rem; }}
 
 /* Expansor y captions */
 [data-testid="stExpander"] {{
-  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 14px !important;
+  background: var(--glass2) !important; border: 1px solid var(--line) !important; border-radius: 12px !important;
 }}
 [data-testid="stExpander"] summary p {{ color: var(--muted) !important; }}
-[data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; font-size: .85rem !important; }}
+[data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; font-size: .82rem !important; }}
 hr {{ border-color: var(--line) !important; }}
-[data-testid="stDataFrame"] {{ border-radius: 14px; overflow: hidden; border: 1px solid var(--line); max-width: 100%; }}
-[data-testid="stVideo"] video {{ border-radius: 14px; width: 100%; }}
-[data-testid="stIFrame"], iframe {{ max-width: 100%; }}
+[data-testid="stDataFrame"] {{ border-radius: 12px; overflow: hidden; border: 1px solid var(--line); max-width: 100%; }}
+[data-testid="stVideo"] video {{ border-radius: 12px; width: 100%; }}
 
 /* Etiquetas de estado */
 .live {{
   display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #000;
-  font-weight: 700; font-size: .76rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
+  font-weight: 700; font-size: .72rem; padding: 3px 9px; border-radius: 999px; margin-top: 6px;
 }}
-.live::before {{ content: ""; width: 7px; height: 7px; border-radius: 50%; background: #000; animation: pulso 1.3s infinite; }}
+.live::before {{ content: ""; width: 6px; height: 6px; border-radius: 50%; background: #000; animation: pulso 1.3s infinite; }}
 .off {{
   display: inline-flex; align-items: center; background: var(--glass3); color: var(--muted);
-  border: 1px solid var(--line); font-weight: 600; font-size: .76rem; padding: 4px 10px; border-radius: 999px; margin-top: 8px;
+  border: 1px solid var(--line); font-weight: 600; font-size: .72rem; padding: 3px 9px; border-radius: 999px; margin-top: 6px;
 }}
-.titulo-cam {{ font-size: clamp(1rem, 2.6vw, 1.15rem); font-weight: 700; margin-top: 8px; color: var(--text); overflow-wrap: anywhere; }}
-.zona {{ color: var(--muted); font-size: clamp(.82rem, 2vw, .92rem); margin-top: 2px; overflow-wrap: anywhere; }}
+.titulo-cam {{ font-size: 1.05rem; font-weight: 700; margin-top: 6px; color: var(--text); overflow-wrap: anywhere; }}
+.zona {{ color: var(--muted); font-size: .86rem; margin-top: 2px; overflow-wrap: anywhere; }}
 
-/* Video: proporción fija 16:9 que se adapta al ancho de su columna */
+/* Video: 16:9 que se adapta al ancho de la tarjeta */
 .thumb {{
   position: relative; width: 100%; aspect-ratio: 16 / 9; background: rgba(5,8,5,.55);
-  border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+  border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
 }}
 .thumb img {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }}
 .thumb .sin {{
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 6px; color: #8FA397; font-size: clamp(.85rem, 2.4vw, 1.02rem); text-align: center; padding: 8px;
+  justify-content: center; gap: 6px; color: #8FA397; font-size: .9rem; text-align: center; padding: 8px;
 }}
 
-/* Indicadores: se acomodan según el ancho */
-.kpis {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin: 4px 0 8px; }}
+/* Indicadores */
+.kpis {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin: 2px 0 6px; }}
 .kpi {{
-  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 9px 11px; min-width: 0;
+  background: var(--glass2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; min-width: 0;
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-  transition: transform .2s ease, background .2s ease;
 }}
-.kpi:hover {{ transform: translateY(-2px); background: var(--glass); }}
-.kpi small {{ display: block; color: var(--muted); font-size: clamp(.7rem, 1.9vw, .76rem); }}
-.kpi b {{ display: block; color: var(--accent); font-size: clamp(1.05rem, 3vw, 1.3rem); margin-top: 2px; overflow-wrap: anywhere; }}
+.kpi small {{ display: block; color: var(--muted); font-size: .72rem; }}
+.kpi b {{ display: block; color: var(--accent); font-size: 1.1rem; margin-top: 1px; overflow-wrap: anywhere; }}
 
 /* Leyenda */
-.leyenda {{ display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--muted); font-size: .85rem; margin: 6px 0; }}
-.leyenda i {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }}
+.leyenda {{ display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--muted); font-size: .8rem; margin: 4px 0; }}
+.leyenda i {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }}
 
 /* Lista animada */
-.al {{ display: flex; flex-direction: column; gap: 6px; }}
+.al {{ display: flex; flex-direction: column; gap: 5px; }}
 .al-item {{
-  background: var(--glass2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px;
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  background: var(--glass2); border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-  opacity: 0; transform: translateX(-18px); animation: entra .4s ease forwards;
-  animation-delay: calc(var(--i) * 60ms); transition: background .2s ease, transform .2s ease;
+  opacity: 0; transform: translateX(-14px); animation: entra .4s ease forwards;
+  animation-delay: calc(var(--i) * 50ms); transition: background .2s ease, transform .2s ease;
 }}
 .al-item:hover {{ background: var(--sel); transform: translateX(3px); }}
 @keyframes entra {{ to {{ opacity: 1; transform: none; }} }}
 .al-item > div:first-child {{ min-width: 0; }}
-.al-titulo {{ font-weight: 600; color: var(--text); overflow-wrap: anywhere; }}
-.al-desc {{ color: var(--muted); font-size: .86rem; margin-top: 2px; overflow-wrap: anywhere; }}
-.al-meta {{ color: var(--muted); font-size: .78rem; white-space: nowrap; flex-shrink: 0; }}
+.al-titulo {{ font-weight: 600; color: var(--text); overflow-wrap: anywhere; font-size: .95rem; }}
+.al-desc {{ color: var(--muted); font-size: .84rem; margin-top: 2px; overflow-wrap: anywhere; }}
+.al-meta {{ color: var(--muted); font-size: .76rem; white-space: nowrap; flex-shrink: 0; }}
 .vacio {{
-  text-align: center; color: var(--muted); padding: 24px 10px; border: 1px dashed var(--line);
-  border-radius: 14px; background: var(--glass3);
+  text-align: center; color: var(--muted); padding: 20px 10px; border: 1px dashed var(--line);
+  border-radius: 12px; background: var(--glass3); font-size: .92rem;
 }}
 .aviso {{
-  background: var(--glass3); border: 1px dashed var(--line); border-radius: 14px; padding: 18px;
-  text-align: center; color: var(--muted);
+  background: var(--glass3); border: 1px dashed var(--line); border-radius: 12px; padding: 14px;
+  text-align: center; color: var(--muted); font-size: .92rem;
 }}
 
-/* Teléfonos: márgenes y tipografía más compactos */
+/* Teléfonos: todo en una sola columna, a ancho completo */
 @media (max-width: 640px) {{
-  .block-container {{ padding-left: .6rem !important; padding-right: .6rem !important; }}
+  .block-container {{ padding: 10px 10px 90px !important; }}
+  [data-testid="stHorizontalBlock"] {{ flex-direction: column !important; gap: 8px !important; }}
+  [data-testid="stHorizontalBlock"] > [data-testid="column"] {{
+    flex: 1 1 100% !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+  }}
   [data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 10px !important; }}
-  .stButton > button {{ padding: .5rem .6rem; }}
   .kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+  .logo {{ font-size: 1.15rem; }}
+  .subtitle {{ font-size: .86rem; }}
+  div[role="radiogroup"] label p {{ font-size: .82rem !important; }}
+  div[role="radiogroup"] label {{ padding: 5px 9px !important; }}
 }}
 
 @media (prefers-reduced-motion: reduce) {{
@@ -269,7 +285,7 @@ def esc(texto):
 
 def thumb_html(url=None, texto="Sin señal"):
     img = f'<img src="{url}" onerror="this.style.display=\'none\'" />' if url else ""
-    return (f'<div class="thumb"><div class="sin"><div style="font-size:2rem">📡</div>'
+    return (f'<div class="thumb"><div class="sin"><div style="font-size:1.8rem">📡</div>'
             f'<div>{texto}</div></div>{img}</div>')
 
 
@@ -299,20 +315,19 @@ def hora_de(fecha):
 
 
 # ---------------------------------------------------------------------------
-# Plantillas de componentes HTML (audio y hablar), con colores del tema.
-# Son responsivas: los controles se acomodan en varias líneas si no caben.
+# Plantillas de componentes HTML (audio y hablar), con colores del tema
 # ---------------------------------------------------------------------------
 PLANTILLA_AUDIO = """
 <div style="font-family:Roboto,sans-serif;color:__TEXT__;background:__GLASS__;border:1px solid __LINE__;
-            border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;
+            border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
             backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-sizing:border-box;width:100%">
   <audio id="a" src="__URL__" autoplay></audio>
-  <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:8px 14px;
-          font-weight:700;cursor:pointer;white-space:nowrap">🔇 Silenciar</button>
-  <div style="display:flex;align-items:center;gap:8px;flex:1 1 160px;min-width:0">
-    <span style="color:__MUTED__;font-size:13px">🔊</span>
+  <button id="b" style="background:__ACCENT__;color:#000;border:0;border-radius:999px;padding:7px 12px;
+          font-weight:700;cursor:pointer;white-space:nowrap;font-size:13px">🔇 Silenciar</button>
+  <div style="display:flex;align-items:center;gap:6px;flex:1 1 140px;min-width:0">
+    <span style="color:__MUTED__;font-size:12px">🔊</span>
     <input id="v" type="range" min="0" max="100" value="100" style="flex:1;min-width:0;accent-color:__ACCENT__">
-    <span id="vt" style="color:__MUTED__;font-size:13px;min-width:38px;text-align:right">100%</span>
+    <span id="vt" style="color:__MUTED__;font-size:12px;min-width:34px;text-align:right">100%</span>
   </div>
 </div>
 <script>
@@ -327,12 +342,12 @@ a.play().catch(() => {});
 
 PLANTILLA_HABLAR = """
 <div style="font-family:Roboto,sans-serif;background:__GLASS__;border:1px solid __LINE__;
-            border-radius:14px;padding:10px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+            border-radius:12px;padding:8px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
             box-sizing:border-box;width:100%">
   <button id="h" style="width:100%;background:__ACCENT__;color:#000;border:0;border-radius:999px;
-          padding:11px;font-weight:700;font-size:15px;cursor:pointer;user-select:none;touch-action:none">
+          padding:9px;font-weight:700;font-size:14px;cursor:pointer;user-select:none;touch-action:none">
     🎙️ Mantén presionado para hablar</button>
-  <div id="s" style="color:__MUTED__;font-size:13px;margin-top:6px;line-height:1.3">Micrófono apagado</div>
+  <div id="s" style="color:__MUTED__;font-size:12px;margin-top:4px;line-height:1.3">Micrófono apagado</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script>
@@ -407,8 +422,7 @@ def reproductor_audio(cam, pin):
         **colores_iframe(paleta_actual()),
         "__URL__": f"{SERVER_URL}/audio_feed/{cam}/{pin}",
     })
-    # Altura generosa: en pantallas chicas los controles ocupan dos líneas
-    components.html(html_audio, height=104)
+    components.html(html_audio, height=92)
 
 
 def boton_hablar(cam, pin):
@@ -418,7 +432,7 @@ def boton_hablar(cam, pin):
         "__CAM__": json.dumps(cam),
         "__PIN__": json.dumps(pin),
     })
-    components.html(html_hablar, height=120)
+    components.html(html_hablar, height=104)
 
 
 def accion(cam, pin, accion_id, texto):
@@ -513,7 +527,7 @@ def vista_camara():
         st.info("La cámara no está transmitiendo. En el teléfono abre /cliente, escribe el ID y PIN "
                 "y pulsa Iniciar nodo.")
 
-    izquierda, derecha = st.columns([3, 2], gap="medium")
+    izquierda, derecha = st.columns([3, 2], gap="small")
     with izquierda:
         with st.container(border=True):
             st.markdown(thumb_html(f"{SERVER_URL}/video_feed/{cam}/{pin}", "Buscando señal…"),
@@ -601,7 +615,8 @@ def vista_cuadricula():
     st.markdown('<div class="subtitle">Monitorea hasta nueve cámaras a la vez.</div>', unsafe_allow_html=True)
 
     with st.container(border=True):
-        columnas = st.slider("Columnas por fila", 1, 3, 3, key="grid_cols")
+        columnas = st.slider("Columnas por fila (en teléfono se muestran en una columna)", 1, 3, 2,
+                             key="grid_cols")
 
     nodos = api_get("/api/estado_nodos") or []
     por_id = {n["id"]: n for n in nodos}
@@ -685,8 +700,7 @@ def vista_mapa():
             tooltip=f"{hora_de(e['fecha'])} · Cámara {e['cam_id']} · {e['razon']}",
         ).add_to(mapa)
 
-    # Altura moderada: se ve completo tanto en teléfono como en computadora
-    salida = st_folium(mapa, height=440, use_container_width=True,
+    salida = st_folium(mapa, height=380, use_container_width=True,
                        returned_objects=["center", "zoom"], key="mapa")
     if salida and salida.get("center") and salida.get("zoom"):
         st.session_state.mapa_vista = {
