@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EcoGuard · Mapa</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+html, body { margin:0; height:100%; background:#000; font-family:Roboto, system-ui, sans-serif; color:#EDF7F0; }
+#mapa { height:100%; width:100%; }
+#top { position:absolute; z-index:500; top:10px; left:10px; background:rgba(11,16,12,.92);
+       border:1px solid #1F2B22; border-radius:10px; padding:10px 14px; font-size:14px; }
+#top b { color:#00E676; font-size:16px; }
+.leaflet-popup-content { color:#000; font-size:14px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div id="top"><b>EcoGuard · Mapa en vivo</b><div id="estado">Cargando…</div></div>
+<div id="mapa"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const mapa = L.map("mapa").setView([19.4326, -99.1332], 5);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19 }).addTo(mapa);
+
+const capaNodos = L.layerGroup().addTo(mapa);
+const capaEventos = L.layerGroup().addTo(mapa);
+let centrado = false;
+
+async function actualizar() {
+  try {
+    const r = await fetch("/api/mapa.geojson", { cache: "no-store" });
+    const g = await r.json();
+    capaNodos.clearLayers();
+    capaEventos.clearLayers();
+    const puntos = [];
+    let total = 0, enVivo = 0;
+
+    for (const f of g.features) {
+      const [lon, lat] = f.geometry.coordinates;
+      const p = f.properties;
+      puntos.push([lat, lon]);
+
+      if (p.tipo === "nodo") {
+        total++;
+        if (p.activo) enVivo++;
+        L.circleMarker([lat, lon], {
+          radius: 10, weight: 2, fillOpacity: .9,
+          color: p.activo ? "#00C853" : "#9E9E9E",
+          fillColor: p.activo ? "#00E676" : "#555"
+        }).bindPopup(
+          `<b>${p.nombre}</b><br>Estado: ${p.activo ? "EN VIVO" : "Sin conexión"}<br>` +
+          `Zona: ${p.zona}<br>Batería: ${p.bateria}<br>Última señal: ${p.ultima_vez || "N/D"}`
+        ).addTo(capaNodos);
+      } else {
+        const robo = p.tipo_evento === "robo";
+        L.circleMarker([lat, lon], {
+          radius: 8, fillOpacity: .8, weight: 1,
+          color: robo ? "#FF5252" : "#FFB300",
+          fillColor: robo ? "#FF5252" : "#FFB300"
+        }).bindPopup(
+          `<b>${robo ? "Posible robo" : "Pico de sonido"}</b><br>${p.razon}<br>${p.fecha}`
+        ).addTo(capaEventos);
+      }
+    }
+
+    if (!centrado && puntos.length) {
+      mapa.fitBounds(puntos, { padding: [40, 40], maxZoom: 15 });
+      centrado = true;
+    }
+    document.getElementById("estado").textContent = `${enVivo} de ${total} cámaras en vivo`;
+  } catch (e) {
+    document.getElementById("estado").textContent = "Sin conexión con el servidor";
+  }
+}
+
+actualizar();
+setInterval(actualizar, 5000);
+</script>
+</body>
+</html>

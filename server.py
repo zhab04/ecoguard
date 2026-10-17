@@ -3,7 +3,6 @@ import os
 import hmac
 import hashlib
 import secrets
-import string
 import time
 import sqlite3
 import threading
@@ -33,8 +32,17 @@ ZONA = ZoneInfo(os.environ.get("TZ_NAME") or "America/Mexico_City")
 NTFY_URL = (os.environ.get("NTFY_URL") or "").strip()
 MAX_GRABACIONES = int(os.environ.get("MAX_GRABACIONES_POR_CAMARA") or "15")
 ACTIVO_SEG = 5.0
-LAT_DEF, LON_DEF = 19.2780, -99.0080
-ALFABETO = string.ascii_uppercase + string.digits
+LAT_DEF, LON_DEF = 19.4326, -99.1332
+
+# Palabras cortas y fáciles de recordar para generar IDs y PIN
+PALABRAS = [
+    "sol", "luna", "mango", "tigre", "rio", "nube", "pino", "roca", "fresa", "monte",
+    "perla", "faro", "lirio", "coral", "brisa", "cedro", "jaguar", "volcan", "ceiba", "aguila",
+    "nopal", "maiz", "trueno", "olivo", "oso", "lobo", "gato", "perro", "pato", "cabra",
+    "zorro", "conejo", "nido", "hoja", "flor", "piedra", "lago", "mar", "selva", "bosque",
+    "cielo", "viento", "lluvia", "arena", "tuna", "chile", "cafe", "limon", "uva", "pera",
+    "eco", "rayo", "astro", "cometa", "vela", "puma", "colibri", "delfin",
+]
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or "cambia-esto"
@@ -56,6 +64,9 @@ fps_stats = {}
 telemetry = {}
 audio_estado = {}
 ultimo_evento = {}
+ZONAS = {}                 # (lat, lon) redondeados -> nombre de la zona
+ZONAS_PENDIENTES = set()
+ZONAS_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Base de datos (SQLite)
@@ -122,7 +133,7 @@ def autorizado(cam, token):
     fila = run_db("SELECT pin_hash FROM camaras WHERE cam_id=?", (cam,), True)
     if not fila:
         return False
-    return hmac.compare_digest(fila[0]["pin_hash"], hash_pin(str(token)))
+    return hmac.compare_digest(fila[0]["pin_hash"], hash_pin(str(token).strip().lower()))
 
 
 def lista_camaras():
@@ -153,6 +164,60 @@ def guardar_ubicacion(cam, lat, lon):
            "ON CONFLICT(cam_id) DO UPDATE SET lat=excluded.lat, lon=excluded.lon, "
            "actualizado=excluded.actualizado")
     run_db(sql, (cam, lat, lon, ahora_iso()))
+
+
+# ---------------------------------------------------------------------------
+# Nombre de zona a partir de coordenadas (OpenStreetMap Nominatim)
+# ---------------------------------------------------------------------------
+def nombre_zona(lat, lon):
+    """Devuelve el nombre de la zona. Si aún no existe, consulta en segundo plano."""
+    clave = (round(lat, 3), round(lon, 3))
+    if clave in ZONAS:
+        return ZONAS[clave]
+    with ZONAS_LOCK:
+        if clave in ZONAS_PENDIENTES:
+            return "Buscando zona…"
+        ZONAS_PENDIENTES.add(clave)
+    threading.Thread(target=_consultar_zona, args=(clave,), daemon=True).start()
+    return "Buscando zona…"
+
+
+def _consultar_zona(clave):
+    lat, lon = clave
+    try:
+        r = http.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "jsonv2", "zoom": 14, "accept-language": "es"},
+            headers={"User-Agent": "EcoGuard/1.0 (proyecto educativo)"},
+            timeout=6,
+        )
+        if r.ok:
+            datos = r.json()
+            a = datos.get("address", {})
+            claves = ("neighbourhood", "suburb", "city_district", "city", "town", "village", "municipality")
+            partes = [a[k] for k in claves if a.get(k)]
+            nombre = ", ".join(dict.fromkeys(partes[:3])) or datos.get("display_name", "Zona desconocida")
+            ZONAS[clave] = nombre
+    except Exception as e:
+        print("Error consultando zona:", e)  # no se guarda: se reintenta en la siguiente consulta
+    finally:
+        with ZONAS_LOCK:
+            ZONAS_PENDIENTES.discard(clave)
+
+
+# ---------------------------------------------------------------------------
+# Generación de ID y PIN memorables
+# ---------------------------------------------------------------------------
+def palabra():
+    return secrets.choice(PALABRAS)
+
+
+def generar_id():
+    return f"cam-{palabra()}-{secrets.randbelow(90) + 10}"
+
+
+def generar_pin():
+    return f"{palabra()}-{palabra()}-{palabra()}-{secrets.randbelow(90) + 10}"
 
 
 def enviar_push(titulo, texto):
@@ -241,6 +306,19 @@ def on_audio(data):
             prev["chunks"].append((seq, bytes(chunk)))
             prev["ts"] = time.time()
         condicion.notify_all()
+
+
+@socketio.on("hablar_chunk")
+def on_hablar(data):
+    """Reenvía la voz del operador (dashboard) al teléfono de la cámara."""
+    cam = str(data.get("cam_id", ""))
+    if not autorizado(cam, data.get("token")):
+        return
+    chunk = data.get("chunk")
+    if not isinstance(chunk, (bytes, bytearray)):
+        return
+    socketio.emit("audio_entrante", {"chunk": bytes(chunk), "sr": data.get("sr", 48000)},
+                  to=sala(cam))
 
 
 @socketio.on("recording_segment")
@@ -369,7 +447,7 @@ def audio_feed(cam_id, token):
 
 
 # ---------------------------------------------------------------------------
-# Rutas web y API
+# Rutas web
 # ---------------------------------------------------------------------------
 @app.route("/")
 def index():
@@ -383,11 +461,25 @@ def cliente():
     return send_from_directory(STATIC_DIR, "cliente.html")
 
 
+@app.route("/mapa")
+def mapa_publico():
+    return send_from_directory(STATIC_DIR, "mapa.html")
+
+
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
+@app.after_request
+def cabeceras_cors(resp):
+    if request.path.startswith("/api/"):
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
 @app.route("/api/camaras", methods=["POST"])
 def crear_camara():
     for _ in range(10):
-        cam = "CAM-" + "".join(secrets.choice(ALFABETO) for _ in range(6))
-        pin = "".join(secrets.choice(ALFABETO) for _ in range(8))
+        cam, pin = generar_id(), generar_pin()
         try:
             run_db("INSERT INTO camaras (cam_id, pin_hash, creada) VALUES (?,?,?)",
                    (cam, hash_pin(pin), ahora_iso()))
@@ -397,8 +489,7 @@ def crear_camara():
     return jsonify(error="No se pudo generar la cámara"), 500
 
 
-@app.route("/api/estado_nodos")
-def api_estado_nodos():
+def datos_nodos():
     ts = time.time()
     nodos = []
     for cam in lista_camaras():
@@ -408,6 +499,7 @@ def api_estado_nodos():
         nodos.append({
             "id": cam,
             "nombre": f"Nodo {cam}",
+            "zona": nombre_zona(lat, lon),
             "lat": lat,
             "lon": lon,
             "precision_m": t.get("precision"),
@@ -426,74 +518,3 @@ def api_estado_nodos():
             "calidad": t.get("calidad"),
             "ultima_vez": (datetime.fromtimestamp(visto, ZONA).isoformat(timespec="seconds")
                            if visto else None),
-        })
-    return jsonify(nodos)
-
-
-@app.route("/api/eventos")
-def api_eventos():
-    cam = request.args.get("cam_id")
-    horas = float(request.args.get("horas", 0) or 0)
-    limite = min(int(request.args.get("limit", 100)), 500)
-    condiciones, params = [], []
-    if cam:
-        condiciones.append("cam_id=?"); params.append(cam)
-    if horas:
-        desde = datetime.now(ZONA) - timedelta(hours=horas)
-        condiciones.append("fecha>=?"); params.append(desde.isoformat(timespec="seconds"))
-    where = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
-    sql = f"SELECT * FROM eventos {where} ORDER BY id DESC LIMIT ?"
-    return jsonify(run_db(sql, (*params, limite), True))
-
-
-@app.route("/api/estadisticas")
-def api_estadisticas():
-    cam = request.args.get("cam_id")
-    where, params = ("WHERE cam_id=?", (cam,)) if cam else ("", ())
-    sql_hora = (f"SELECT substr(fecha,12,2) AS hora, COUNT(*) AS total FROM eventos {where} "
-                "GROUP BY hora ORDER BY hora")
-    por_hora = run_db(sql_hora, params, True)
-    sql_tipo = f"SELECT tipo, COUNT(*) AS total FROM eventos {where} GROUP BY tipo"
-    por_tipo = run_db(sql_tipo, params, True)
-    return jsonify(por_hora=[[f["hora"], f["total"]] for f in por_hora], por_tipo=por_tipo)
-
-
-@app.route("/api/grabaciones")
-def api_grabaciones():
-    cam = request.args.get("cam_id", "")
-    sql = ("SELECT id, cam_id, inicio, duracion, bytes FROM grabaciones WHERE cam_id=? "
-           "ORDER BY id DESC LIMIT 50")
-    filas = run_db(sql, (cam,), True)
-    for f in filas:
-        f["ruta"] = f"/grabaciones/{f['id']}"
-    return jsonify(filas)
-
-
-@app.route("/grabaciones/<int:rid>/<token>")
-def ver_grabacion(rid, token):
-    fila = run_db("SELECT cam_id, archivo FROM grabaciones WHERE id=?", (rid,), True)
-    if not fila or not autorizado(fila[0]["cam_id"], token):
-        abort(403)
-    return send_file(os.path.join(REC_DIR, fila[0]["archivo"]),
-                     mimetype="video/webm", conditional=True)
-
-
-ACCIONES = {"start_recording", "stop_recording", "mute_audio", "unmute_audio",
-            "calidad_alta", "calidad_baja"}
-
-
-@app.route("/api/comando", methods=["POST"])
-def api_comando():
-    datos = request.get_json(silent=True) or {}
-    cam, pin = str(datos.get("cam_id", "")), str(datos.get("pin", ""))
-    if not autorizado(cam, pin):
-        return jsonify(error="ID o PIN incorrecto"), 403
-    accion = datos.get("accion")
-    if accion not in ACCIONES:
-        return jsonify(error="Acción no válida"), 400
-    socketio.emit("comando", {"accion": accion}, to=sala(cam))
-    return jsonify(ok=True)
-
-
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT") or 5000), debug=False)
