@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>EcoGuard · Nodo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+:root{--bg:#000;--bg2:#0B100C;--bg3:#141C16;--line:#1F2B22;--text:#EDF7F0;--muted:#8FA397;--accent:#00E676;--danger:#FF5252}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-ui,sans-serif;padding:16px;
+     padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+h1{font-size:1.5rem;margin:4px 0 14px}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+label{color:var(--muted);font-size:.9rem}
+input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg3);color:var(--text);font-size:1.05rem;margin:6px 0 10px}
+button{width:100%;padding:13px;border:0;border-radius:999px;background:var(--accent);color:#000;font-weight:700;font-size:1.05rem;margin:6px 0}
+button.sec{background:var(--bg3);color:var(--text);border:1px solid var(--line)}
+button.rec{background:var(--danger);color:#fff}
+video,canvas{width:100%;border-radius:12px;background:#050805;display:block}
+.estado{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:.95rem}
+.estado div{background:var(--bg3);border-radius:10px;padding:8px}
+.estado b{display:block;color:var(--muted);font-weight:500;font-size:.8rem}
+.on{color:var(--accent)} .off{color:var(--danger)}
+#msg{color:var(--muted);min-height:1.3em;font-size:.95rem;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>🛡️ EcoGuard · Nodo</h1>
+
+<div class="card" id="login">
+  <label>ID de la cámara</label><input id="cam" autocomplete="off" />
+  <label>PIN</label><input id="pin" type="password" autocomplete="off" />
+  <button id="iniciar">Iniciar nodo</button>
+  <div id="msgLogin" class="off"></div>
+</div>
+
+<div id="panel" hidden>
+  <div class="card"><video id="preview" autoplay playsinline muted></video><canvas id="captura" hidden></canvas></div>
+  <div class="card"><div class="estado" id="estado"></div></div>
+  <div class="card">
+    <button id="sensores" class="sec">Activar sensores de movimiento</button>
+    <button id="btnAudio" class="sec">Silenciar audio</button>
+    <button id="btnRec" class="rec">Iniciar grabación</button>
+    <div id="msg"></div>
+  </div>
+</div>
+
+<script>
+const CFG = {
+  ancho: 1280, fpsMax: 15, fpsMin: 5, calidadMax: 0.8, calidadMin: 0.4,
+  segundosSegmento: 20, bitsVideo: 1500000,
+  umbralSonidoDb: 18, umbralMovimiento: 6,        // m/s² sobre la aceleración lineal
+  cooldownSonidoMs: 8000, cooldownMovMs: 15000, telemetriaMs: 3000
+};
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
+const pickMime = lista => lista.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
+
+let socket = null, stream = null, audioTrack = null, cam = "", pin = "";
+let registrado = false, enVivo = false, sensoresOn = false;
+let fps = CFG.fpsMax, calidad = 0.7, pendientes = 0, framesEnvio = 0, fpsReal = 0, tFps = performance.now();
+let gps = {}, bat = null, cargando = null, orient = null, movimiento = null, luz = null, audioDb = null;
+let audioCtx = null, analyser = null, audioMuted = false, recAudio = null;
+let grabando = false, recVideo = null, baseline = [], ultimoSonido = 0, ultimoMov = 0;
+let wakeLock = null;
+
+try { $("cam").value = localStorage.getItem("eco_cam") || ""; } catch (e) {}
+
+// ---------- Arranque (dentro del gesto del usuario) ----------
+$("iniciar").onclick = async () => {
+  pedirPermisoMovimiento();   // iOS exige el permiso dentro del gesto del usuario
+  cam = $("cam").value.trim(); pin = $("pin").value.trim();
+  if (!cam || !pin) { $("msgLogin").textContent = "Escribe el ID y el PIN"; return; }
+  try { localStorage.setItem("eco_cam", cam); } catch (e) {}
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: CFG.ancho },
+               height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+  } catch (e) {
+    $("msgLogin").textContent = "No se pudo abrir cámara/micrófono: " + e.message; return;
+  }
+  $("login").hidden = true; $("panel").hidden = false;
+  $("preview").srcObject = stream; await $("preview").play().catch(() => {});
+  audioTrack = stream.getAudioTracks()[0] || null;
+
+  conectar();
+  iniciarGps(); iniciarBateria(); iniciarLuz(); iniciarSensoresMovimiento(); iniciarAudio();
+  pedirWakeLock();
+  enVivo = true;
+  bucleVideo(); bucleTelemetria();
+};
+
+// ---------- Socket.IO ----------
+function conectar() {
+  socket = io({ transports: ["websocket", "polling"] });
+  socket.on("connect", () => {
+    socket.emit("registrar_camara", { cam_id: cam, token_seguridad: pin });
+    detenerStreamAudio(); iniciarStreamAudio();     // reinicia el audio tras reconectar
+  });
+  socket.on("registro_ok", () => { registrado = true; mensaje("Conectado al servidor"); });
+  socket.on("registro_error", d => { registrado = false; mensaje(d.motivo); });
+  socket.on("disconnect", () => { registrado = false; mensaje("Sin conexión, reintentando…"); });
+  socket.on("comando", c => ejecutarComando(c.accion));
+}
+
+// ---------- Video ----------
+async function bucleVideo() {
+  const video = $("preview"), captura = $("captura"), ctx = captura.getContext("2d");
+  while (enVivo) {
+    const t0 = performance.now();
+    if (registrado && video.videoWidth && pendientes < 3) {
+      const escala = Math.min(1, CFG.ancho / video.videoWidth);
+      captura.width = Math.round(video.videoWidth * escala);
+      captura.height = Math.round(video.videoHeight * escala);
+      ctx.drawImage(video, 0, 0, captura.width, captura.height);
+      const blob = await new Promise(r => captura.toBlob(r, "image/jpeg", calidad));
+      if (blob && socket.connected) {
+        const buf = await blob.arrayBuffer();
+        const ini = performance.now();
+        pendientes++;
+        socket.timeout(4000).emit("video_frame", { cam_id: cam, token: pin, frame: buf }, err => {
+          pendientes--;
+          if (!err) ajustarCalidad(performance.now() - ini);
+        });
+        contarFps();
+      }
+    }
+    await sleep(1000 / fps - (performance.now() - t0));
+  }
+}
+
+// Ajusta calidad y FPS según el tiempo de ida y vuelta (RTT) del servidor
+function ajustarCalidad(rtt) {
+  if (rtt > 500) { calidad = Math.max(CFG.calidadMin, calidad - 0.1); fps = Math.max(CFG.fpsMin, fps - 1); }
+  else if (rtt < 150) { calidad = Math.min(CFG.calidadMax, calidad + 0.05); fps = Math.min(CFG.fpsMax, fps + 1); }
+}
+
+function contarFps() {
+  framesEnvio++;
+  const ahora = performance.now();
+  if (ahora - tFps >= 1000) { fpsReal = framesEnvio; framesEnvio = 0; tFps = ahora; }
+}
+
+// ---------- Telemetría ----------
+async function bucleTelemetria() {
+  while (enVivo) {
+    if (socket && socket.connected && registrado) {
+      socket.emit("telemetria", {
+        cam_id: cam, token: pin,
+        lat: gps.lat ?? null, lon: gps.lon ?? null, precision: gps.acc ?? null,
+        velocidad: gps.speed ?? null, rumbo: gps.heading ?? null,
+        bat, cargando, orient, movimiento, luz,
+        red: navigator.connection?.effectiveType || null,
+        audio_db: audioDb, grabando, fps: fpsReal, calidad: Math.round(calidad * 100)
+      });
+    }
+    mostrarEstado();
+    await sleep(CFG.telemetriaMs);
+  }
+}
+
+// ---------- Sensores ----------
+function iniciarGps() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(p => {
+    const c = p.coords;
+    gps = { lat: c.latitude, lon: c.longitude, acc: Math.round(c.accuracy),
+            speed: c.speed != null ? +(c.speed * 3.6).toFixed(1) : null, heading: c.heading };
+  }, e => mensaje("GPS: " + e.message),
+  { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+async function iniciarBateria() {
+  if (!navigator.getBattery) return;
+  const b = await navigator.getBattery();
+  const actualizar = () => { bat = Math.round(b.level * 100); cargando = b.charging; };
+  actualizar();
+  b.addEventListener("levelchange", actualizar);
+  b.addEventListener("chargingchange", actualizar);
+}
+
+function iniciarLuz() {
+  if (!("AmbientLightSensor" in window)) return;
+  try {
+    const s = new AmbientLightSensor({ frequency: 1 });
+    s.onreading = () => { luz = Math.round(s.illuminance); };
+    s.start();
+  } catch (e) {}
+}
+
+function pedirPermisoMovimiento() {
+  const permisos = [];
+  if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function")
+    permisos.push(DeviceMotionEvent.requestPermission());
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function")
+    permisos.push(DeviceOrientationEvent.requestPermission());
+  Promise.all(permisos)
+    .then(() => iniciarSensoresMovimiento())
+    .catch(() => mensaje("Permiso de sensores denegado"));
+}
+
+function iniciarSensoresMovimiento() {
+  if (sensoresOn) return;
+  sensoresOn = true;
+  window.addEventListener("devicemotion", onMotion);
+  window.addEventListener("deviceorientation", e => {
+    orient = { a: Math.round(e.alpha ?? 0), b: Math.round(e.beta ?? 0), g: Math.round(e.gamma ?? 0) };
+  });
+  mensaje("Sensores activos");
+}
+
+function onMotion(e) {
+  let m;
+  if (e.acceleration && e.acceleration.x != null) {
+    const a = e.acceleration;
+    m = Math.hypot(a.x, a.y, a.z);
+  } else {
+    const g = e.accelerationIncludingGravity || {};
+    m = Math.abs(Math.hypot(g.x || 0, g.y || 0, g.z || 0) - 9.81);
+  }
+  movimiento = +m.toFixed(2);
+  const ahora = Date.now();
+  if (m >= CFG.umbralMovimiento && ahora - ultimoMov > CFG.cooldownMovMs) {
+    ultimoMov = ahora;
+    socket?.emit("evento_movimiento", { cam_id: cam, token: pin, magnitud: movimiento });
+    try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (_) {}
+    mensaje("⚠️ Movimiento brusco detectado y reportado");
+  }
+}
+
+async function pedirWakeLock() {
+  try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") pedirWakeLock();
+});
+
+// ---------- Audio: detección de picos + streaming ----------
+function iniciarAudio() {
+  if (!audioTrack) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const fuente = audioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  fuente.connect(analyser);
+  const datos = new Float32Array(analyser.fftSize);
+
+  setInterval(() => {
+    if (audioMuted) return;
+    analyser.getFloatTimeDomainData(datos);
+    let suma = 0;
+    for (const v of datos) suma += v * v;
+    const db = 20 * Math.log10(Math.max(Math.sqrt(suma / datos.length), 1e-6));
+    audioDb = +db.toFixed(1);
+
+    baseline.push(db);
+    if (baseline.length > 50) baseline.shift();
+    const base = baseline.reduce((a, b) => a + b, 0) / baseline.length;
+    const ahora = Date.now();
+    if (baseline.length >= 20 && db > base + CFG.umbralSonidoDb && db > -50
+        && ahora - ultimoSonido > CFG.cooldownSonidoMs) {
+      ultimoSonido = ahora;
+      socket?.emit("evento_sonido", { cam_id: cam, token: pin, db: audioDb, linea_base: +base.toFixed(1) });
+      mensaje(`🔊 Pico de sonido: ${audioDb} dB`);
+    }
+  }, 200);
+
+  iniciarStreamAudio();
+}
+
+function iniciarStreamAudio() {
+  if (!audioTrack || recAudio || audioMuted) return;
+  const tipo = pickMime(["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]);
+  recAudio = new MediaRecorder(new MediaStream([audioTrack]), tipo ? { mimeType: tipo } : {});
+  let primero = true;
+  recAudio.ondataavailable = async e => {
+    if (!e.data || !e.data.size || !socket?.connected) return;
+    const buf = await e.data.arrayBuffer();
+    socket.emit("audio_chunk", { cam_id: cam, token: pin, chunk: buf, header: primero });
+    primero = false;
+  };
+  recAudio.start(500);
+}
+
+function detenerStreamAudio() {
+  if (recAudio && recAudio.state !== "inactive") recAudio.stop();
+  recAudio = null;
+}
+
+function silenciar(valor) {
+  audioMuted = valor;
+  if (audioTrack) audioTrack.enabled = !valor;
+  if (valor) detenerStreamAudio(); else iniciarStreamAudio();
+  $("btnAudio").textContent = valor ? "Activar audio" : "Silenciar audio";
+  mensaje(valor ? "Audio silenciado" : "Audio activo");
+}
+
+// ---------- Grabación de fragmentos ----------
+function iniciarGrabacion() {
+  if (grabando || !stream) return;
+  grabando = true;
+  cicloSegmento();
+  mostrarEstado();
+}
+
+function detenerGrabacion() {
+  grabando = false;
+  if (recVideo && recVideo.state !== "inactive") recVideo.stop();
+  mostrarEstado();
+}
+
+function cicloSegmento() {
+  if (!grabando || !stream) return;
+  const pistas = [stream.getVideoTracks()[0]];
+  if (audioTrack) pistas.push(audioTrack);
+  const tipo = pickMime(["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]);
+  const rec = new MediaRecorder(new MediaStream(pistas),
+                                { mimeType: tipo, videoBitsPerSecond: CFG.bitsVideo });
+  const partes = [], inicio = new Date(), t0 = Date.now();
+  rec.ondataavailable = e => { if (e.data && e.data.size) partes.push(e.data); };
+  rec.onstop = async () => {
+    if (partes.length && socket?.connected) {
+      const buf = await new Blob(partes, { type: rec.mimeType }).arrayBuffer();
+      socket.timeout(60000).emit("recording_segment",
+        { cam_id: cam, token: pin, video: buf, duracion: (Date.now() - t0) / 1000, inicio: inicio.toISOString() },
+        (err, res) => { if (err || !res?.ok) mensaje("Error al subir un fragmento"); });
+    }
+    cicloSegmento();
+  };
+  recVideo = rec;
+  rec.start();
+  setTimeout(() => { if (rec.state !== "inactive") rec.stop(); }, CFG.segundosSegmento * 1000);
+}
+
+// ---------- Comandos desde el dashboard ----------
+function ejecutarComando(accion) {
+  if (accion === "start_recording") iniciarGrabacion();
+  else if (accion === "stop_recording") detenerGrabacion();
+  else if (accion === "mute_audio") silenciar(true);
+  else if (accion === "unmute_audio") silenciar(false);
+  else if (accion === "calidad_alta") { calidad = CFG.calidadMax; fps = CFG.fpsMax; }
+  else if (accion === "calidad_baja") { calidad = CFG.calidadMin; fps = CFG.fpsMin; }
+  mostrarEstado();
+}
+
+// ---------- Botones y pantalla ----------
+$("btnAudio").onclick = () => silenciar(!audioMuted);
+$("btnRec").onclick = () => grabando ? detenerGrabacion() : iniciarGrabacion();
+$("sensores").onclick = pedirPermisoMovimiento;
+
+function mensaje(t) { $("msg").textContent = t; }
+
+function mostrarEstado() {
+  const f = (t, v, c = "") => `<div><b>${t}</b><span class="${c}">${v ?? "N/D"}</span></div>`;
+  $("estado").innerHTML = [
+    f("Servidor", registrado ? "Conectado" : "Desconectado", registrado ? "on" : "off"),
+    f("FPS", fpsReal),
+    f("Calidad", Math.round(calidad * 100) + "%"),
+    f("GPS", gps.lat != null ? `${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)} (±${gps.acc} m)` : null),
+    f("Batería", bat != null ? bat + "%" + (cargando ? " ⚡" : "") : null),
+    f("Sonido", audioDb != null ? audioDb + " dB" : null),
+    f("Movimiento", movimiento != null ? movimiento + " m/s²" : null),
+    f("Grabación", grabando ? "● REC" : "Apagada", grabando ? "off" : "")
+  ].join("");
+  $("btnRec").textContent = grabando ? "Detener grabación" : "Iniciar grabación";
+}
+</script>
+</body>
+</html>

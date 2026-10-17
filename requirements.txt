@@ -1,0 +1,13 @@
+Flask==3.0.3
+Flask-SocketIO==5.3.6
+python-socketio==5.11.4
+python-engineio==4.9.1
+eventlet==0.36.1
+dnspython==2.6.1
+gunicorn==22.0.0
+streamlit==1.40.2
+folium==0.17.0
+streamlit-folium==0.22.0
+pandas
+requests==2.32.3
+tzdata==2024.2
